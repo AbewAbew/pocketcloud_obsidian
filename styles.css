@@ -1,0 +1,1078 @@
+/* Pocketbook Cloud Highlights Importer - Dashboard Styles */
+
+/* ============================================ */
+/* DASHBOARD VIEW */
+/* ============================================ */
+
+.pocketbook-dashboard {
+    padding: 20px;
+}
+
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.dashboard-header h2 {
+    margin: 0;
+    font-size: 1.5em;
+}
+
+.dashboard-refresh-btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border: none;
+    cursor: pointer;
+    font-size: 0.9em;
+}
+
+.dashboard-refresh-btn:hover {
+    opacity: 0.9;
+}
+
+.dashboard-section {
+    margin-bottom: 28px;
+}
+
+.dashboard-section h3 {
+    margin: 0 0 16px 0;
+    font-size: 1.1em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.dashboard-empty {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.dashboard-loading {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-muted);
+}
+
+/* ============================================ */
+/* STATS CARDS */
+/* ============================================ */
+
+.stats-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 12px;
+}
+
+.stat-card {
+    background: var(--background-secondary);
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+    border: 1px solid var(--background-modifier-border);
+}
+
+.stat-card-clickable {
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stat-card-clickable:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border-color: var(--interactive-accent);
+}
+
+.stat-icon {
+    font-size: 1.5em;
+    margin-bottom: 8px;
+}
+
+.stat-value {
+    font-size: 1.8em;
+    font-weight: bold;
+    color: var(--text-normal);
+    margin-bottom: 4px;
+}
+
+.stat-label {
+    font-size: 0.85em;
+    color: var(--text-muted);
+}
+
+/* ============================================ */
+/* BOOK CARDS */
+/* ============================================ */
+
+.books-list,
+.books-list-with-covers {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.book-card {
+    background: var(--background-secondary);
+    border-radius: 8px;
+    padding: 14px;
+    border: 1px solid var(--background-modifier-border);
+}
+
+.book-card-with-cover {
+    display: flex;
+    gap: 14px;
+    background: var(--background-secondary);
+    border-radius: 8px;
+    padding: 12px;
+    border: 1px solid var(--background-modifier-border);
+}
+
+.book-cover-small {
+    width: 50px;
+    height: 75px;
+    min-width: 50px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--background-modifier-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.book-cover-small img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.cover-placeholder {
+    font-size: 1.5em;
+}
+
+.book-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.book-info {
+    margin-bottom: 10px;
+}
+
+.book-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+}
+
+.book-title {
+    font-weight: 600;
+    font-size: 1em;
+}
+
+.book-author {
+    font-size: 0.85em;
+    color: var(--text-muted);
+}
+
+/* ============================================ */
+/* PAGE COUNT EDITOR */
+/* ============================================ */
+
+.page-count-editor {
+    display: inline-flex;
+    align-items: center;
+}
+
+.page-count-display {
+    cursor: pointer;
+    font-size: 0.75em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.page-count-display.has-pages {
+    color: var(--text-muted);
+    background: var(--background-modifier-border);
+}
+
+.page-count-display.no-pages {
+    opacity: 0.4;
+}
+
+.page-count-display:hover {
+    opacity: 1;
+    background: var(--background-modifier-hover);
+}
+
+.page-count-input {
+    width: 60px;
+    padding: 2px 6px;
+    font-size: 0.75em;
+    border: 1px solid var(--interactive-accent);
+    border-radius: 4px;
+    background: var(--background-primary);
+    color: var(--text-normal);
+    outline: none;
+}
+
+.page-count-input:focus {
+    box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+}
+
+/* ============================================ */
+/* PROGRESS BAR */
+/* ============================================ */
+
+.progress-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 10px;
+    background: #1a1a1a;
+    border-radius: 5px;
+    overflow: hidden;
+    border: 1px solid #333;
+}
+
+.progress-fill {
+    height: 100%;
+    background: #22c55e;
+    border-radius: 5px;
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    font-size: 0.9em;
+    font-weight: 600;
+    color: var(--text-normal);
+    min-width: 45px;
+    text-align: right;
+}
+
+/* ============================================ */
+/* ACTIVITY LIST */
+/* ============================================ */
+
+.activity-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.activity-item {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--background-modifier-border);
+    font-size: 0.9em;
+}
+
+.activity-item:last-child {
+    border-bottom: none;
+}
+
+/* ============================================ */
+/* COMPLETED BOOKS MODAL */
+/* ============================================ */
+
+.completed-books-modal {
+    padding: 20px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.completed-books-modal h2 {
+    margin: 0 0 8px 0;
+    font-size: 1.5em;
+}
+
+.modal-subtitle {
+    color: var(--text-muted);
+    margin: 0 0 20px 0;
+}
+
+.modal-empty {
+    color: var(--text-muted);
+    font-style: italic;
+    text-align: center;
+    padding: 40px;
+}
+
+.books-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 20px;
+}
+
+.book-card-modal {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.book-cover-container {
+    position: relative;
+    width: 120px;
+    height: 180px;
+    margin-bottom: 10px;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.book-cover {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.book-cover-placeholder {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, var(--background-secondary), var(--background-modifier-border));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px;
+}
+
+.book-cover-placeholder span {
+    font-size: 2em;
+}
+
+.placeholder-title {
+    font-size: 0.7em;
+    color: var(--text-muted);
+    line-height: 1.2;
+}
+
+.completed-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    background: var(--interactive-success, #4CAF50);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.book-info-modal {
+    width: 100%;
+}
+
+.book-title-modal {
+    font-weight: 600;
+    font-size: 0.9em;
+    margin-bottom: 4px;
+    line-height: 1.2;
+}
+
+.book-author-modal {
+    font-size: 0.8em;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.book-status-modal {
+    font-size: 0.75em;
+    color: var(--interactive-success, #4CAF50);
+    font-weight: 500;
+}
+
+/* ============================================ */
+/* SYNC FOOTER */
+/* ============================================ */
+
+.dashboard-footer {
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--background-modifier-border);
+    text-align: center;
+    font-size: 0.85em;
+    color: var(--text-muted);
+}
+
+/* ============================================ */
+/* READING HEATMAP */
+/* ============================================ */
+
+.heatmap-section {
+    margin-top: 24px;
+}
+
+.heatmap-container {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    gap: 4px;
+    overflow-x: auto;
+    padding: 10px;
+    background: var(--background-secondary);
+    border-radius: 12px;
+    border: 1px solid var(--background-modifier-border);
+}
+
+.heatmap-year {
+    font-size: 0.8em;
+    font-weight: bold;
+    color: var(--text-normal);
+    padding: 4px;
+}
+
+.heatmap-months {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 2px;
+    grid-column: 2;
+}
+
+.heatmap-months span {
+    font-size: 0.7em;
+    color: var(--text-muted);
+    flex: 1;
+    text-align: center;
+}
+
+.heatmap-days {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding-top: 2px;
+    grid-row: 2;
+}
+
+.heatmap-days span {
+    font-size: 0.65em;
+    color: var(--text-muted);
+    height: 10px;
+    line-height: 10px;
+    text-align: right;
+    padding-right: 4px;
+}
+
+.heatmap-boxes {
+    display: grid;
+    grid-template-columns: repeat(53, 10px);
+    grid-template-rows: repeat(7, 10px);
+    gap: 2px;
+    grid-auto-flow: column;
+    grid-column: 2;
+    grid-row: 2;
+}
+
+.heatmap-box {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    background: var(--background-modifier-border);
+}
+
+.heatmap-box.empty {
+    background: transparent;
+}
+
+.heatmap-box.today {
+    outline: 2px solid var(--interactive-accent);
+    outline-offset: -1px;
+}
+
+/* ============================================ */
+/* READING STATISTICS */
+/* ============================================ */
+
+.reading-stats-section {
+    margin-top: 24px;
+}
+
+.stats-subtitle {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+}
+
+.reading-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+}
+
+.reading-stats-grid .stat-card {
+    background: var(--background-secondary);
+    border-radius: 10px;
+    padding: 16px;
+    border: 1px solid var(--background-modifier-border);
+}
+
+.reading-stats-grid .stat-label {
+    font-size: 0.8em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.reading-stats-grid .stat-value {
+    font-size: 1.4em;
+    font-weight: bold;
+    color: var(--text-normal);
+}
+
+.stat-unit {
+    font-size: 0.6em;
+    color: var(--text-muted);
+    font-weight: normal;
+}
+
+.stat-value.trend.positive {
+    color: #22c55e;
+}
+
+.stat-value.trend.negative {
+    color: #ef4444;
+}
+
+.trend-label {
+    font-size: 0.55em;
+    color: var(--text-muted);
+    font-weight: normal;
+}
+
+.goal-card {
+    grid-column: span 2;
+}
+
+.goal-progress {
+    margin-top: 8px;
+}
+
+.goal-text {
+    font-size: 0.9em;
+    color: var(--text-normal);
+    margin-bottom: 8px;
+}
+
+.goal-bar {
+    width: 100%;
+    height: 8px;
+    background: #1a1a1a;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.goal-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #22c55e, #4ade80);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+/* ============================================ */
+/* BOOK DETAIL MODAL STYLES (PREMIUM REDESIGN) */
+/* ============================================ */
+
+/* Target the Modal Shell (set by main.ts) */
+.pocketbook-book-detail-modal {
+    width: 90vw !important;
+    max-width: 900px !important;
+    height: 85vh !important;
+}
+
+/* The inner content container */
+.book-detail-modal-content {
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    background: var(--background-primary);
+}
+
+/* Ensure box-sizing is handled correctly */
+.pocketbook-book-detail-modal * {
+    box-sizing: border-box;
+}
+
+/* Ensure box-sizing is handled correctly */
+.book-detail-modal * {
+    box-sizing: border-box;
+}
+
+.book-detail-container {
+    display: flex;
+    gap: 24px;
+    padding: 32px;
+    position: relative;
+    width: 100%;
+}
+
+/* Gradient background */
+.book-detail-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 250px;
+    background: linear-gradient(to bottom, var(--background-secondary), transparent);
+    z-index: 0;
+    opacity: 0.6;
+}
+
+.book-detail-cover,
+.book-detail-info {
+    position: relative;
+    z-index: 1;
+}
+
+/* Mobile Breakpoint */
+@media (max-width: 700px) {
+    .book-detail-container {
+        flex-direction: column;
+        align-items: stretch;
+        /* Change from center to stretch to avoid width constriction */
+        padding: 24px 20px;
+        gap: 24px;
+    }
+
+    .pocketbook-book-detail-modal {
+        width: 100vw !important;
+        /* Use full width on mobile */
+        max-width: none !important;
+        height: 100% !important;
+        /* Full height */
+        max-height: 100% !important;
+        border-radius: 0 !important;
+        /* Remove radius for full screen feel */
+    }
+
+    .book-detail-modal-content {
+        border-radius: 0 !important;
+    }
+
+    .book-detail-cover {
+        width: 160px;
+        margin: 0 auto;
+        /* Center the cover explicitly */
+    }
+
+    .book-detail-info {
+        width: 100%;
+        /* Force full width */
+        padding: 0 4px;
+        /* Tiny safety padding */
+    }
+
+    .book-detail-title {
+        font-size: 1.5em !important;
+    }
+}
+
+.book-detail-cover {
+    flex-shrink: 0;
+    width: 200px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.book-detail-cover img {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    transition: transform 0.2s;
+}
+
+.book-detail-cover img:hover {
+    transform: scale(1.02);
+}
+
+.cover-placeholder-large {
+    width: 100%;
+    aspect-ratio: 2/3;
+    background: var(--background-secondary);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 3em;
+    color: var(--text-muted);
+    border: 1px dashed var(--background-modifier-border);
+}
+
+.detail-progress {
+    margin-top: 16px;
+    width: 100%;
+}
+
+.detail-progress-bar {
+    width: 100%;
+    height: 6px;
+    background: var(--background-modifier-border);
+    border-radius: 10px;
+}
+
+.detail-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--interactive-accent), var(--interactive-accent-hover));
+    border-radius: 10px;
+}
+
+.detail-progress-text {
+    font-size: 0.75em;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 6px;
+}
+
+.book-detail-info {
+    flex: 1;
+    min-width: 0;
+    /* Vital for flex children to shrink */
+    display: flex;
+    flex-direction: column;
+}
+
+/* Typography */
+.book-detail-title-container {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 8px;
+    justify-content: flex-start;
+}
+
+.book-detail-title {
+    margin: 0 !important;
+    font-size: 1.8em;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--text-normal);
+}
+
+.metadata-refresh-btn {
+    background: transparent;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    padding: 6px;
+    flex-shrink: 0;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.metadata-refresh-btn:hover {
+    color: var(--text-normal);
+    background: var(--background-secondary);
+}
+
+.book-detail-author {
+    margin: 0 0 16px 0;
+    color: var(--text-normal);
+    opacity: 0.8;
+    font-size: 1.1em;
+    font-weight: 500;
+}
+
+/* Ratings */
+.book-detail-ratings {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--background-secondary);
+    padding: 6px 14px;
+    border-radius: 20px;
+    margin-bottom: 20px;
+    width: fit-content;
+}
+
+.rating-score {
+    font-weight: 700;
+    color: var(--text-normal);
+}
+
+.rating-count {
+    font-size: 0.85em;
+    color: var(--text-muted);
+}
+
+/* Genres */
+.book-detail-genres {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 24px;
+}
+
+.genre-tag {
+    background: transparent;
+    border: 1px solid var(--interactive-accent);
+    color: var(--interactive-accent);
+    padding: 4px 12px;
+    border-radius: 100px;
+    font-size: 0.75em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Description */
+.book-detail-description {
+    margin-bottom: 24px;
+    padding-left: 16px;
+    border-left: 3px solid var(--interactive-accent);
+}
+
+.book-detail-description h4 {
+    display: none;
+}
+
+.book-detail-description p {
+    margin: 0;
+    line-height: 1.6;
+    font-size: 0.95em;
+    max-height: 200px;
+    overflow-y: auto;
+    padding-right: 8px;
+    white-space: pre-line;
+    color: var(--text-normal);
+}
+
+/* Metadata Grid */
+.book-detail-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 24px;
+    width: 100%;
+}
+
+.meta-item {
+    flex: 1;
+    min-width: 80px;
+    background: var(--background-secondary);
+    padding: 12px;
+    border-radius: 8px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--background-modifier-border);
+}
+
+.meta-label {
+    font-size: 0.7em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.meta-value {
+    font-size: 1.1em;
+    font-weight: 700;
+    color: var(--text-normal);
+}
+
+/* Link */
+.book-detail-link {
+    margin-top: auto;
+}
+
+.hardcover-link {
+    display: inline-block;
+    padding: 10px 24px;
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.hardcover-link:hover {
+    text-decoration: none;
+    opacity: 0.9;
+}
+
+/* REVIEWS & SIMILAR - FIXED ALIGNMENT */
+.book-detail-reviews-section,
+.similar-books-section {
+    padding: 24px 32px;
+    /* Consistent padding */
+    border-top: 1px solid var(--background-modifier-border);
+    margin: 0;
+    /* Remove negative margins if any */
+    width: 100%;
+}
+
+.book-detail-reviews-section h3,
+.similar-books-header {
+    margin-top: 0;
+    margin-bottom: 16px;
+    font-size: 1.1em;
+    font-weight: 600;
+    color: var(--text-normal);
+}
+
+.review-card {
+    background: var(--background-secondary);
+    padding: 16px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    border: 1px solid var(--background-modifier-border);
+}
+
+.review-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 0.9em;
+}
+
+.reviewer-name {
+    font-weight: bold;
+    color: var(--text-normal);
+}
+
+/* FIXED REVIEW BODY SCROLLING */
+.review-body {
+    margin: 0;
+    font-size: 0.9em;
+    line-height: 1.5;
+    white-space: pre-line;
+    max-height: 200px;
+    overflow-y: auto;
+    padding-right: 8px;
+    text-align: left;
+}
+
+.review-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.review-body::-webkit-scrollbar-track {
+    background: var(--background-primary);
+    border-radius: 3px;
+}
+
+.review-body::-webkit-scrollbar-thumb {
+    background: var(--background-modifier-border);
+    border-radius: 3px;
+}
+
+.review-spoiler {
+    background: var(--background-primary);
+    padding: 10px;
+    border-radius: 4px;
+    text-align: center;
+}
+
+.review-spoiler button {
+    cursor: pointer;
+}
+
+.goodreads-link {
+    display: block;
+    text-align: center;
+    margin-top: 16px;
+    color: var(--text-muted);
+    font-size: 0.9em;
+    text-decoration: none;
+}
+
+.goodreads-link:hover {
+    color: var(--text-accent);
+    text-decoration: underline;
+}
+
+.goodreads-load-more-btn {
+    display: block;
+    margin: 16px auto;
+    padding: 8px 16px;
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: opacity 0.2s;
+}
+
+.goodreads-load-more-btn:hover {
+    opacity: 0.9;
+}
+
+/* Similar Books - SIDE SCROLL FIX */
+.similar-books-container {
+    display: flex;
+    flex-direction: row;
+    /* Force row */
+    flex-wrap: nowrap;
+    /* Prevent wrapping */
+    overflow-x: auto;
+    /* Allow scrolling */
+    gap: 16px;
+    padding-bottom: 12px;
+    justify-content: flex-start;
+    /* Start from left */
+    width: 100%;
+    scrollbar-width: thin;
+}
+
+.similar-book-card {
+    flex: 0 0 120px;
+    /* Rigid width */
+    width: 120px;
+    /* Double check width */
+    display: flex;
+    flex-direction: column;
+    text-decoration: none;
+    color: inherit;
+}
+
+.similar-book-cover {
+    width: 100%;
+    aspect-ratio: 2/3;
+    object-fit: cover;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    background: var(--background-modifier-border);
+}
+
+.similar-book-title {
+    font-size: 0.85em;
+    line-height: 1.3;
+    max-height: 2.6em;
+    overflow: hidden;
+    font-weight: 500;
+    color: var(--text-normal);
+}
+
+@media (max-width: 600px) {
+
+    .book-detail-reviews-section,
+    .similar-books-section {
+        padding: 20px;
+    }
+}

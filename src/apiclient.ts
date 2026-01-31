@@ -23,6 +23,7 @@ export interface PocketbookCloudBook {
   read_status: string;
   collections: string;
   metadata: PocketbookCloudBookMetadata;
+  mtime?: string;
 }
 export interface PocketbookCloudNoteInfo {
   type: string; //TODO: guess this can be an enum or so?
@@ -73,7 +74,7 @@ interface PocketbookCloudShopInfo {
  * - fast_hash is a hash of the book file, it is used to identify the book
  */
 export class PocketbookCloudApiClient {
-  constructor(private login_client: PocketbookCloudLoginClient) {}
+  constructor(private login_client: PocketbookCloudLoginClient) { }
 
   async getBooks(): Promise<PocketbookCloudBook[]> {
     const access_token = await this.login_client.getAccessToken();
@@ -185,7 +186,7 @@ export class PocketbookCloudLoginClient {
     private access_token: string | null,
     private refresh_token: string | null,
     private access_token_valid_until: Date
-  ) {}
+  ) { }
 
   async login() {
     // Validate required parameters
@@ -203,11 +204,11 @@ export class PocketbookCloudLoginClient {
 
     const shops: PocketbookCloudShopInfo[] = await fetch(
       'https://cloud.pocketbook.digital/api/v1.0/auth/login?' +
-        new URLSearchParams({
-          username: this.username,
-          client_id: this.client_id,
-          client_secret: this.client_secret,
-        })
+      new URLSearchParams({
+        username: this.username,
+        client_id: this.client_id,
+        client_secret: this.client_secret,
+      })
     )
       .then(response => response.json())
       .then(data => {
