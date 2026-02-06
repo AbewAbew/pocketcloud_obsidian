@@ -208,6 +208,15 @@ export class ReadingTracker {
     }
 
     /**
+     * Get cover URL for a book by its ID (fast_hash)
+     * Used as a fallback when local covers don't exist
+     */
+    getCoverUrlForBook(bookId: string): string | undefined {
+        const book = this.cachedBooks.find(b => b.fast_hash === bookId);
+        return book?.metadata?.cover?.[0]?.path;
+    }
+
+    /**
      * Get books from cache (for dashboard to use without re-fetching)
      */
     getCachedBooks(): PocketbookCloudBook[] {

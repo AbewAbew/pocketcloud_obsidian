@@ -330,9 +330,9 @@ export class ReadingDatabase {
             }
             this.data.activities.push(activity);
 
-            // Keep only last 100 activities
-            if (this.data.activities.length > 100) {
-                this.data.activities = this.data.activities.slice(-100);
+            // Keep only last 365 activities (enough for a full year of calendar data)
+            if (this.data.activities.length > 365) {
+                this.data.activities = this.data.activities.slice(-365);
             }
         }
 

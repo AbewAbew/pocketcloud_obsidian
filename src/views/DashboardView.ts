@@ -2,7 +2,7 @@ import { ItemView, WorkspaceLeaf, Notice, TFile } from 'obsidian';
 import PocketbookCloudHighlightsImporterPlugin from '../main';
 import { DashboardStats, BookWithProgress } from '../tracker/ReadingStats';
 import { LibraryModal } from './LibraryModal';
-import { generateReadingAnalytics, ReadingAnalytics, getHeatmapData } from '../tracker/ReadingAnalytics';
+import { generateReadingAnalytics, ReadingAnalytics, getHeatmapData, getCalendarData, CalendarBookEntry } from '../tracker/ReadingAnalytics';
 
 export const DASHBOARD_VIEW_TYPE = 'pocketbook-reading-dashboard';
 
@@ -12,6 +12,9 @@ export const DASHBOARD_VIEW_TYPE = 'pocketbook-reading-dashboard';
 export class DashboardView extends ItemView {
   private plugin: PocketbookCloudHighlightsImporterPlugin;
   private refreshInterval: number | null = null;
+  private calendarMode: boolean = false;
+  private calendarYear: number = new Date().getFullYear();
+  private calendarMonth: number = new Date().getMonth();
 
   constructor(leaf: WorkspaceLeaf, plugin: PocketbookCloudHighlightsImporterPlugin) {
     super(leaf);
@@ -91,9 +94,12 @@ export class DashboardView extends ItemView {
       const recentActivity = await this.plugin.tracker.getRecentActivityFeed(5);
 
       // Get analytics data
+      const coversFolder = this.plugin.settings.covers_folder || 'Attachments';
       const analytics = await generateReadingAnalytics(
         this.plugin.tracker.getDatabase(),
-        this.plugin.settings.estimatedPagesPerBook || 300
+        this.plugin.settings.estimatedPagesPerBook || 300,
+        coversFolder,
+        (bookId: string) => this.plugin.tracker.getCoverUrlForBook(bookId)
       );
 
       // Remove loading
@@ -105,14 +111,17 @@ export class DashboardView extends ItemView {
       // Currently Reading Section
       this.renderCurrentlyReadingSection(container, currentlyReading);
 
-      // Recent Activity Section
-      this.renderActivitySection(container, recentActivity);
-
       // Heatmap Section (GitHub-style contribution graph)
       this.renderHeatmapSection(container, analytics);
 
+      // Recent Activity Section
+      this.renderActivitySection(container, recentActivity);
+
       // Reading Statistics Section
       await this.renderReadingStatsSection(container, analytics, stats);
+
+      // Spark of Memory Section
+      await this.renderSparkOfMemorySection(container);
 
       // Last Sync Info
       const lastSync = await this.plugin.tracker.getLastSync();
@@ -441,21 +450,28 @@ export class DashboardView extends ItemView {
   }
 
   /**
-   * Render the recent activity section
+   * Render the recent activity section (accordion, collapsed by default)
    */
   private renderActivitySection(container: HTMLElement, activities: string[]): void {
-    const section = container.createDiv({ cls: 'dashboard-section' });
-    section.createEl('h3', { text: 'Recent Activity' });
+    const subtitle = activities.length > 0
+      ? `${activities.length} activities`
+      : 'No recent activity';
+
+    const content = this.createAccordionSection(container, {
+      title: 'Recent Activity',
+      subtitle,
+      defaultOpen: false,
+    });
 
     if (activities.length === 0) {
-      section.createEl('p', {
+      content.createEl('p', {
         text: 'No recent activity. Start reading!',
         cls: 'dashboard-empty'
       });
       return;
     }
 
-    const activityList = section.createEl('ul', { cls: 'activity-list' });
+    const activityList = content.createEl('ul', { cls: 'activity-list' });
 
     for (const activity of activities) {
       activityList.createEl('li', { text: activity });
@@ -463,14 +479,40 @@ export class DashboardView extends ItemView {
   }
 
   /**
-   * Render GitHub-style contribution heatmap
+   * Render heatmap/calendar section with toggle
    */
   private renderHeatmapSection(container: HTMLElement, analytics: ReadingAnalytics): void {
     const section = container.createDiv({ cls: 'dashboard-section heatmap-section' });
-    section.createEl('h3', { text: 'READING HEATMAP', cls: 'dashboard-section-title' });
+    this.renderHeatmapSectionContent(section, analytics);
+  }
 
-    // Just render it directly, letting CSS handle scrolling
-    this.drawHeatmap(section, analytics);
+  /**
+   * Render the content of the heatmap/calendar section (header + view)
+   */
+  private renderHeatmapSectionContent(section: HTMLElement, analytics: ReadingAnalytics): void {
+    section.empty();
+
+    // Header row with title and toggle
+    const headerRow = section.createDiv({ cls: 'heatmap-header-row' });
+    headerRow.createEl('h3', {
+      text: this.calendarMode ? 'READING CALENDAR' : 'READING HEATMAP',
+      cls: 'dashboard-section-title'
+    });
+
+    const toggleBtn = headerRow.createEl('button', {
+      text: this.calendarMode ? 'Heatmap' : 'Calendar',
+      cls: 'heatmap-calendar-toggle'
+    });
+    toggleBtn.addEventListener('click', () => {
+      this.calendarMode = !this.calendarMode;
+      this.renderHeatmapSectionContent(section, analytics);
+    });
+
+    if (this.calendarMode) {
+      this.drawCalendar(section, analytics);
+    } else {
+      this.drawHeatmap(section, analytics);
+    }
   }
 
   private drawHeatmap(container: HTMLElement, analytics: ReadingAnalytics): void {
@@ -551,14 +593,175 @@ export class DashboardView extends ItemView {
   }
 
   /**
-   * Render reading statistics section
+   * Draw the monthly calendar view with book covers
+   */
+  private drawCalendar(container: HTMLElement, analytics: ReadingAnalytics): void {
+    const calendarContainer = container.createDiv({ cls: 'calendar-container' });
+
+    // Navigation row
+    const nav = calendarContainer.createDiv({ cls: 'calendar-nav' });
+
+    const prevBtn = nav.createEl('button', { text: '\u2039', cls: 'calendar-nav-btn' });
+    prevBtn.addEventListener('click', () => {
+      this.calendarMonth--;
+      if (this.calendarMonth < 0) {
+        this.calendarMonth = 11;
+        this.calendarYear--;
+      }
+      // Re-render just the calendar container
+      const section = container;
+      this.renderHeatmapSectionContent(section, analytics);
+    });
+
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'];
+    nav.createEl('span', {
+      text: `${monthNames[this.calendarMonth]} ${this.calendarYear}`,
+      cls: 'calendar-month-title'
+    });
+
+    const nextBtn = nav.createEl('button', { text: '\u203A', cls: 'calendar-nav-btn' });
+    nextBtn.addEventListener('click', () => {
+      this.calendarMonth++;
+      if (this.calendarMonth > 11) {
+        this.calendarMonth = 0;
+        this.calendarYear++;
+      }
+      const section = container;
+      this.renderHeatmapSectionContent(section, analytics);
+    });
+
+    // Day-of-week headers
+    const grid = calendarContainer.createDiv({ cls: 'calendar-grid' });
+    const dayHeaders = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    for (const dayName of dayHeaders) {
+      grid.createDiv({ cls: 'calendar-day-header', text: dayName });
+    }
+
+    // Get calendar data
+    const calendarData = getCalendarData(
+      analytics.dailyBooks,
+      analytics.dailyPages,
+      this.calendarYear,
+      this.calendarMonth
+    );
+
+    // Determine first day of month for padding
+    const firstDayOfWeek = new Date(this.calendarYear, this.calendarMonth, 1).getDay();
+
+    // Add empty cells for padding before the 1st
+    for (let i = 0; i < firstDayOfWeek; i++) {
+      grid.createDiv({ cls: 'calendar-cell calendar-cell-empty' });
+    }
+
+    // Today string for highlighting
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    // Render each day
+    for (const dayData of calendarData) {
+      const cell = grid.createDiv({ cls: 'calendar-cell' });
+
+      if (dayData.date === todayStr) {
+        cell.addClass('calendar-cell-today');
+      }
+      if (dayData.books.length > 0) {
+        cell.addClass('calendar-cell-has-books');
+      }
+
+      // Date number
+      const dayNum = parseInt(dayData.date.split('-')[2]);
+      cell.createDiv({ cls: 'calendar-date-number', text: String(dayNum) });
+
+      // Cover thumbnails area
+      if (dayData.books.length > 0) {
+        const coversArea = cell.createDiv({ cls: 'calendar-covers' });
+        this.renderCalendarCovers(coversArea, dayData.books);
+      }
+
+      // Tooltip
+      if (dayData.books.length > 0) {
+        const bookTitles = dayData.books.map(b => b.title).join(', ');
+        cell.title = `${dayData.date}\n${dayData.totalPages} pages\n${dayData.books.length} book${dayData.books.length > 1 ? 's' : ''}: ${bookTitles}`;
+      } else {
+        cell.title = dayData.date;
+      }
+    }
+  }
+
+  /**
+   * Render book cover thumbnails inside a calendar cell
+   */
+  private renderCalendarCovers(container: HTMLElement, books: CalendarBookEntry[]): void {
+    const maxVisible = 3;
+    const visibleBooks = books.slice(0, maxVisible);
+
+    // Add layout class based on count
+    if (visibleBooks.length === 1) {
+      container.addClass('calendar-covers-single');
+    } else if (visibleBooks.length === 2) {
+      container.addClass('calendar-covers-double');
+    } else {
+      container.addClass('calendar-covers-stacked');
+    }
+
+    visibleBooks.forEach((book, index) => {
+      const wrapper = container.createDiv({ cls: 'calendar-cover-wrapper' });
+      wrapper.style.zIndex = String(maxVisible - index);
+
+      // Try local cover first
+      if (book.coverPath) {
+        const file = this.app.vault.getAbstractFileByPath(book.coverPath);
+        if (file instanceof TFile) {
+          const img = wrapper.createEl('img', { cls: 'calendar-cover-img' });
+          img.src = this.app.vault.getResourcePath(file);
+          img.alt = book.title;
+          return;
+        }
+      }
+
+      // Try remote cover URL
+      if (book.coverUrl) {
+        const img = wrapper.createEl('img', { cls: 'calendar-cover-img' });
+        img.src = book.coverUrl;
+        img.alt = book.title;
+        // Fallback on error
+        img.addEventListener('error', () => {
+          img.remove();
+          const placeholder = wrapper.createDiv({ cls: 'calendar-cover-placeholder' });
+          placeholder.textContent = book.title.charAt(0).toUpperCase();
+        });
+        return;
+      }
+
+      // Fallback: first letter placeholder
+      const placeholder = wrapper.createDiv({ cls: 'calendar-cover-placeholder' });
+      placeholder.textContent = book.title.charAt(0).toUpperCase();
+    });
+
+    // Overflow indicator
+    if (books.length > maxVisible) {
+      const more = container.createDiv({ cls: 'calendar-covers-more' });
+      more.textContent = `+${books.length - maxVisible}`;
+    }
+  }
+
+  /**
+   * Render reading statistics section (accordion, collapsed by default)
    */
   private async renderReadingStatsSection(container: HTMLElement, analytics: ReadingAnalytics, stats: DashboardStats): Promise<void> {
-    const section = container.createDiv({ cls: 'dashboard-section reading-stats-section' });
-    section.createEl('h3', { text: 'READING STATISTICS', cls: 'dashboard-section-title' });
-    section.createEl('div', { text: 'Last 30 Days', cls: 'stats-subtitle' });
+    const subtitle = `${analytics.totalPages30Days} pages (30d)`;
 
-    const statsGrid = section.createDiv({ cls: 'reading-stats-grid' });
+    const content = this.createAccordionSection(container, {
+      title: 'READING STATISTICS',
+      subtitle,
+      defaultOpen: false,
+      cls: 'reading-stats-section',
+    });
+
+    content.createEl('div', { text: 'Last 30 Days', cls: 'stats-subtitle' });
+
+    const statsGrid = content.createDiv({ cls: 'reading-stats-grid' });
 
     // Total Pages (30 days)
     const totalPagesCard = statsGrid.createDiv({ cls: 'stat-card' });
@@ -604,49 +807,83 @@ export class DashboardView extends ItemView {
 
     const goalFill = goalBar.createDiv({ cls: 'goal-fill' });
     goalFill.style.cssText = `width: ${goalPercent}%; height: 100%; background: linear-gradient(90deg, #b8860b, #d4af37); border-radius: 4px;`;
+  }
 
-    // Random Highlight Card (Full width below stats)
+  /**
+   * Render Spark of Memory section (accordion, collapsed by default)
+   */
+  private async renderSparkOfMemorySection(container: HTMLElement): Promise<void> {
     const highlight = await this.plugin.tracker.getRandomHighlight();
-    if (highlight) {
-      const highlightSection = container.createDiv({ cls: 'dashboard-section highlight-section' });
-      highlightSection.createEl('h3', { text: 'Spark of Memory' });
+    if (!highlight) return;
 
-      // Clean implementation without inline styles - mostly handled by CSS
-      const highlightCard = highlightSection.createDiv({ cls: 'stat-card highlight-card' });
+    const previewText = highlight.text.length > 50
+      ? highlight.text.substring(0, 50) + '...'
+      : highlight.text;
 
-      // Navigate to book on click
-      highlightCard.addClass('stat-card-clickable');
-      highlightCard.addEventListener('click', () => {
-        // Find the book helper to open it
-        // We might not have the book object here easily, but we have the ISBN/Title from highlight maybe?
-        // Actually highlight object structure depends on tracker.
-        // For now just keep simple display
-      });
+    const content = this.createAccordionSection(container, {
+      title: 'Spark of Memory',
+      subtitle: `"${previewText}"`,
+      defaultOpen: false,
+      cls: 'highlight-section',
+    });
 
-      const quoteEl = highlightCard.createEl('blockquote');
-      quoteEl.setText(`"${highlight.text}"`);
+    const highlightCard = content.createDiv({ cls: 'stat-card highlight-card' });
 
-      const sourceEl = highlightCard.createDiv({ cls: 'highlight-source' });
-      const citation = highlight.title ? `— ${highlight.title}` : '— Unknown Source';
-      sourceEl.createEl('em', { text: citation });
-      sourceEl.style.marginTop = '10px';
-      sourceEl.style.textAlign = 'right';
-      sourceEl.style.color = '#a89f91'; // Muted gold/tan
-      sourceEl.style.display = 'flex';
-      sourceEl.style.justifyContent = 'flex-end';
-      sourceEl.style.fontSize = '0.85em';
+    highlightCard.addClass('stat-card-clickable');
+    highlightCard.addEventListener('click', () => {
+      // Navigate to book on click (placeholder for future enhancement)
+    });
 
-      const link = sourceEl.createEl('a', {
-        text: `— ${highlight.title}`,
-        href: highlight.path
-      });
-      link.style.color = 'var(--text-muted)';
+    const quoteEl = highlightCard.createEl('blockquote');
+    quoteEl.setText(`"${highlight.text}"`);
 
-      link.addEventListener('click', (e) => {
-        e.preventDefault();
-        this.app.workspace.openLinkText(highlight.path, '', true);
-      });
+    const sourceEl = highlightCard.createDiv({ cls: 'highlight-source' });
+    const citation = highlight.title ? `— ${highlight.title}` : '— Unknown Source';
+    sourceEl.createEl('em', { text: citation });
+    sourceEl.style.marginTop = '10px';
+    sourceEl.style.textAlign = 'right';
+    sourceEl.style.color = '#a89f91';
+    sourceEl.style.display = 'flex';
+    sourceEl.style.justifyContent = 'flex-end';
+    sourceEl.style.fontSize = '0.85em';
+
+    const link = sourceEl.createEl('a', {
+      text: `— ${highlight.title}`,
+      href: highlight.path
+    });
+    link.style.color = 'var(--text-muted)';
+
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      this.app.workspace.openLinkText(highlight.path, '', true);
+    });
+  }
+
+  /**
+   * Create an accordion section using native <details>/<summary> elements
+   */
+  private createAccordionSection(container: HTMLElement, opts: {
+    title: string;
+    subtitle?: string;
+    defaultOpen?: boolean;
+    cls?: string;
+  }): HTMLElement {
+    const details = container.createEl('details', {
+      cls: 'accordion-section dashboard-section' + (opts.cls ? ` ${opts.cls}` : '')
+    });
+    if (opts.defaultOpen) {
+      details.setAttribute('open', '');
     }
+
+    const summary = details.createEl('summary');
+    const titleContainer = summary.createDiv({ cls: 'accordion-title-container' });
+    titleContainer.createEl('h3', { text: opts.title });
+    if (opts.subtitle) {
+      titleContainer.createEl('span', { text: opts.subtitle, cls: 'accordion-subtitle' });
+    }
+
+    const content = details.createDiv({ cls: 'accordion-content' });
+    return content;
   }
 
   /**

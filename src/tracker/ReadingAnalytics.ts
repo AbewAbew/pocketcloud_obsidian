@@ -1,11 +1,35 @@
 import { ReadingDatabase, ReadingActivity } from './ReadingDatabase';
 
 /**
+ * A single book entry for a calendar day
+ */
+export interface CalendarBookEntry {
+    bookId: string;
+    title: string;
+    coverPath?: string;   // local vault path: "Attachments/Title.jpg"
+    coverUrl?: string;     // remote fallback
+    progressDelta?: number;
+    type: 'progress' | 'finished' | 'started';
+}
+
+/**
+ * Data for a single calendar day
+ */
+export interface CalendarDayData {
+    date: string;
+    books: CalendarBookEntry[];
+    totalPages: number;
+}
+
+/**
  * Analytics data for reading statistics
  */
 export interface ReadingAnalytics {
     // Daily data for heatmap (date string -> pages read)
     dailyPages: Record<string, number>;
+
+    // Daily books for calendar view (date string -> book entries)
+    dailyBooks: Record<string, CalendarBookEntry[]>;
 
     // Period stats
     totalPagesMonth: number;
@@ -45,7 +69,9 @@ function toLocalDateString(date: Date): string {
  */
 export async function generateReadingAnalytics(
     database: ReadingDatabase,
-    estimatedPagesPerBook: number = 300
+    estimatedPagesPerBook: number = 300,
+    coversFolder: string = 'Attachments',
+    coverUrlLookup?: (bookId: string) => string | undefined
 ): Promise<ReadingAnalytics> {
     const activities = database.getAllActivities();
     const bookPageCounts = await database.getAllBookPageCounts();
@@ -66,13 +92,42 @@ export async function generateReadingAnalytics(
     // Aggregate pages by date
     const dailyPages: Record<string, number> = {};
 
+    // Aggregate books by date for calendar view
+    const dailyBooks: Record<string, CalendarBookEntry[]> = {};
+
     activities.forEach(activity => {
+        const date = activity.date;
+
+        // Aggregate pages (existing logic)
         if (activity.type === 'progress' && activity.progressDelta) {
-            const date = activity.date;
             const pageCount = bookPageCounts[activity.bookId] || estimatedPagesPerBook;
             const pagesRead = Math.round((activity.progressDelta / 100) * pageCount);
-
             dailyPages[date] = (dailyPages[date] || 0) + pagesRead;
+        }
+
+        // Aggregate books per day for calendar
+        if (!dailyBooks[date]) {
+            dailyBooks[date] = [];
+        }
+
+        // Check if this book is already in today's entries
+        const existingEntry = dailyBooks[date].find(e => e.bookId === activity.bookId);
+        if (existingEntry) {
+            // Accumulate progressDelta for same book on same day
+            existingEntry.progressDelta = (existingEntry.progressDelta || 0) + (activity.progressDelta || 0);
+            // Upgrade type: finished > progress > started
+            if (activity.type === 'finished') existingEntry.type = 'finished';
+        } else {
+            const sanitizedTitle = activity.title.replace(/[\\/:*?"<>|]/g, "");
+            const entry: CalendarBookEntry = {
+                bookId: activity.bookId,
+                title: activity.title,
+                coverPath: `${coversFolder}/${sanitizedTitle}.jpg`,
+                coverUrl: coverUrlLookup ? coverUrlLookup(activity.bookId) : undefined,
+                progressDelta: activity.progressDelta,
+                type: activity.type,
+            };
+            dailyBooks[date].push(entry);
         }
     });
 
@@ -132,6 +187,7 @@ export async function generateReadingAnalytics(
 
     return {
         dailyPages,
+        dailyBooks,
         totalPagesMonth,
         totalPagesYear,
         totalPages30Days,
@@ -166,6 +222,35 @@ export function getHeatmapData(dailyPages: Record<string, number>): { date: stri
             pages: dailyPages[dateStr] || 0
         });
         current.setDate(current.getDate() + 1);
+    }
+
+    return result;
+}
+
+/**
+ * Get calendar data for a specific month
+ * @param dailyBooks - Record of date -> book entries
+ * @param dailyPages - Record of date -> pages read
+ * @param year - Full year (e.g. 2026)
+ * @param month - 0-indexed month (0 = January)
+ * @returns CalendarDayData[] for all days in that month
+ */
+export function getCalendarData(
+    dailyBooks: Record<string, CalendarBookEntry[]>,
+    dailyPages: Record<string, number>,
+    year: number,
+    month: number
+): CalendarDayData[] {
+    const result: CalendarDayData[] = [];
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        result.push({
+            date: dateStr,
+            books: dailyBooks[dateStr] || [],
+            totalPages: dailyPages[dateStr] || 0,
+        });
     }
 
     return result;
