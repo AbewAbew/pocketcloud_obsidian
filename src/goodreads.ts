@@ -35,6 +35,14 @@ export interface GoodreadsBookData {
     similarBooks: SimilarBook[];
 }
 
+export interface GoodreadsSearchResult {
+    id: string;
+    title: string;
+    author: string;
+    ratingsCount: number;
+    coverUrl?: string;
+}
+
 // Simplified Cache Data for Index (only Search)
 interface SearchIndexData {
     search: { [query: string]: string };
@@ -268,6 +276,22 @@ export class GoodreadsClient {
      * Search for a book and get its Goodreads ID
      */
     /**
+     * Search for books and return detailed candidates (Public API)
+     */
+    async searchBooks(query: string): Promise<GoodreadsSearchResult[]> {
+        const cleanQuery = this.sanitizeQuery(query);
+        const encodedQuery = encodeURIComponent(cleanQuery);
+        const searchUrl = this.baseSearchUrl + encodedQuery;
+
+        console.log('[Goodreads] Searching (Public):', searchUrl);
+
+        const html = await this.fetchPage(searchUrl);
+        if (!html) return [];
+
+        return this.parseSearchResults(html);
+    }
+
+    /**
      * Search for a book and get its Goodreads ID
      */
     async searchBook(title: string, author?: string, bustCache = false): Promise<string | null> {
@@ -338,7 +362,16 @@ export class GoodreadsClient {
             bestId = best.candidate.id;
         }
 
-        // 2. Fallback to naive Regex if parsing failed or no ID found
+        // 2. Direct Redirect Check (Meta Tags) - If search redirected to Book Page
+        if (!bestId) {
+            const metaMatch = html.match(/meta property="og:url" content="[^"]*\/book\/show\/(\d+)[^"]*"/);
+            if (metaMatch && metaMatch[1]) {
+                console.log('[Goodreads] Detected direct redirect to Book Page:', metaMatch[1]);
+                bestId = metaMatch[1];
+            }
+        }
+
+        // 3. Fallback to global regex match if parsing failed or no ID found
         if (!bestId) {
             console.log('[Goodreads] Falling back to global regex match...');
             // Look for /book/show/{id} pattern
@@ -355,37 +388,103 @@ export class GoodreadsClient {
             return bestId;
         }
 
+        console.log('[Goodreads] Search failed for query:', query);
+        console.log(`[Goodreads] HTML Snippet (First 500 chars): ${html.substring(0, 500).replace(/\n/g, ' ')}`);
+
+        // 4. Fallback: Try searching by Title Only (if Author was included)
+        // Only do this if we haven't already recursed (check via arguments or simplistic check)
+        // To avoid infinite recursion, we only try if the current query implies an author was present
+        if (author && title && !query.trim().toLowerCase().includes('title_only_flag')) {
+            console.log('[Goodreads] Attempting Title-Only search fallback...');
+            // We pass empty author to trigger title-only path. 
+            // We verify title is different from query to ensure we don't loop if input was already title-only
+            const cleanTitle = this.sanitizeQuery(title);
+            if (cleanTitle.length > 3 && cleanTitle !== query) {
+                return this.searchBook(title, undefined, bustCache);
+            }
+        }
+
         return null;
     }
 
     /**
-     * Parse Goodreads search results table to extract candidates
+     * Parse Goodreads search results to extract candidates
+     * Robust version: Scans for book title links instead of fragile table rows
      */
-    private parseSearchResults(html: string): { id: string, title: string, author: string, ratingsCount: number }[] {
-        const results: { id: string, title: string, author: string, ratingsCount: number }[] = [];
-        // Regex to find rows in the search results table
-        const rowRegex = /<tr[^>]*itemtype="http:\/\/schema\.org\/Book"[\s\S]*?<\/tr>/g;
+    /**
+     * Parse Goodreads search results to extract candidates
+     * Robust version: Scans for table rows to keep context (Cover + Title + Author)
+     */
+    private parseSearchResults(html: string): GoodreadsSearchResult[] {
+        const results: GoodreadsSearchResult[] = [];
+
+        // Strategy 1: Table Rows (Standard Desktop View)
+        // <tr itemscope itemtype="http://schema.org/Book">
+        const rowRegex = /<tr[^>]*itemtype="http:\/\/schema\.org\/Book"[^>]*>([\s\S]*?)<\/tr>/g;
+
+        // Strategy 2: Fallback for "bookTitle" links if rows fail (Mobile/Div views)
+        const linkRegex = /<a[^>]*class="[^"]*bookTitle[^"]*"[^>]*href="([^"]*\/book\/show\/(\d+)[^"]*)"[^>]*>([\s\S]*?)<\/a>/g;
+
         let match;
+        let foundRows = false;
 
         while ((match = rowRegex.exec(html)) !== null) {
-            const rowHtml = match[0];
+            foundRows = true;
+            const rowHtml = match[1];
 
-            // Extract URL/ID (href="/book/show/12345.Title")
-            const urlMatch = /href="([^"]*\/book\/show\/(\d+)[^"]*)"/.exec(rowHtml);
-            if (!urlMatch) continue;
-            const id = urlMatch[2];
+            // Extract ID and Title from Title Link
+            const titleMatch = /<a[^>]*class="bookTitle"[^>]*href="([^"]*\/book\/show\/(\d+)[^"]*)"[^>]*>([\s\S]*?)<\/a>/.exec(rowHtml);
+            if (!titleMatch) continue;
 
-            // Extract Title (itemprop="name">Title</span>)
-            const titleMatch = /class="bookTitle"[\s\S]*?itemprop="name">([^<]+)<\/span>/.exec(rowHtml);
-            const title = titleMatch ? this.decodeHtml(titleMatch[1]) : '';
+            const id = titleMatch[2];
+            const title = this.decodeHtml(this.stripHtml(titleMatch[3]));
 
-            // Extract Author (class="authorName" ... itemprop="name">Author</span>)
-            const authorMatch = /class="authorName"[\s\S]*?itemprop="name">([^<]+)<\/span>/.exec(rowHtml);
-            const author = authorMatch ? this.decodeHtml(authorMatch[1]) : '';
+            // Extract Author
+            const authorMatch = /<a[^>]*class="authorName"[^>]*>([\s\S]*?)<\/a>/.exec(rowHtml);
+            const author = authorMatch ? this.decodeHtml(this.stripHtml(authorMatch[1])) : 'Unknown';
 
-            // Extract Ratings Count (minirating matches)
+            // Extract Ratings
+            const ratingMatch = /minirating"[^>]*>[\s\S]*?(\d[\d,\.]*)\s+ratings/.exec(rowHtml);
             let ratingsCount = 0;
-            const ratingMatch = /class="minirating"[^>]*>[\s\S]*?(\d[\d,\.]*)\s+ratings/.exec(rowHtml);
+            if (ratingMatch) {
+                const cleanNum = ratingMatch[1].replace(/,/g, '').replace(/\./g, '');
+                ratingsCount = parseInt(cleanNum) || 0;
+            }
+
+            // Extract Cover
+            const coverMatch = /<img[^>]*src="([^"]*)"/.exec(rowHtml);
+            let coverUrl = coverMatch ? coverMatch[1] : undefined;
+
+            // Fix low-res covers (Goodreads uses _SY75_ or _SX50_)
+            if (coverUrl) {
+                // Try to get a slightly better resolution if possible, or just keep it
+                // Converting _SY75_ to _SY475_ might work but is risky.
+                // For list view, thumbnails are fine.
+                // We can try removing the resize parameter for high res?
+                // e.g. .../books/1442169542i/52397._SY75_.jpg -> .../books/1442169542i/52397.jpg
+                coverUrl = coverUrl.replace(/\._S[XY]\d+_/, '');
+            }
+
+            results.push({ id, title, author, ratingsCount, coverUrl });
+        }
+
+        if (foundRows) return results;
+
+        // Fallback to old link-scanning method
+        console.log('[Goodreads] No table rows found, falling back to link scanning.');
+        while ((match = linkRegex.exec(html)) !== null) {
+            const url = match[1];
+            const id = match[2];
+            const title = this.decodeHtml(this.stripHtml(match[3]));
+
+            // Look ahead for Author link
+            const remainder = html.substring(linkRegex.lastIndex, linkRegex.lastIndex + 1000);
+            const authorMatch = /class="authorName"[^>]*>([\s\S]*?)<\/a>/.exec(remainder);
+            const author = authorMatch ? this.decodeHtml(this.stripHtml(authorMatch[1])) : 'Unknown';
+
+            // Look ahead for Ratings
+            const ratingMatch = /class="minirating"[^>]*>[\s\S]*?(\d[\d,\.]*)\s+ratings/.exec(remainder);
+            let ratingsCount = 0;
             if (ratingMatch) {
                 const cleanNum = ratingMatch[1].replace(/,/g, '').replace(/\./g, '');
                 ratingsCount = parseInt(cleanNum) || 0;
@@ -398,6 +497,22 @@ export class GoodreadsClient {
     }
 
     /**
+     * Helper: Strip HTML tags
+     */
+    private stripHtml(html: string): string {
+        return html.replace(/<[^>]*>?/gm, '').trim();
+    }
+
+    /**
+     * Helper: Decode HTML entities
+     */
+    private decodeHtml(html: string): string {
+        const txt = document.createElement('textarea');
+        txt.innerHTML = html;
+        return txt.value;
+    }
+
+    /**
      * Sanitize search query by replacing punctuation with spaces
      */
     private sanitizeQuery(text: string): string {
@@ -405,6 +520,19 @@ export class GoodreadsClient {
             .replace(/[.:,;]/g, ' ') // Replace common punctuation with space
             .replace(/\s+/g, ' ')    // Collapse multiple spaces
             .trim();
+    }
+
+    /**
+     * Search and get full book data
+     */
+    async findBook(title: string, author?: string, bustCache = false): Promise<GoodreadsBookData | null> {
+        const goodreadsId = await this.searchBook(title, author, bustCache);
+        if (!goodreadsId) {
+            console.log('[Goodreads] Book not found in search');
+            return null;
+        }
+
+        return await this.getBookById(goodreadsId, bustCache);
     }
 
     /**
@@ -849,31 +977,7 @@ export class GoodreadsClient {
         return books;
     }
 
-    private decodeHtml(html: string): string {
-        const txt = document.createElement('textarea');
-        txt.innerHTML = html;
-        return txt.value;
-    }
 
-    /**
-     * Search and get full book data
-     */
-    async findBook(title: string, author?: string, bustCache = false): Promise<GoodreadsBookData | null> {
-        const goodreadsId = await this.searchBook(title, author, bustCache);
-        if (!goodreadsId) {
-            console.log('[Goodreads] Book not found in search');
-            return null;
-        }
-
-        return await this.getBookById(goodreadsId, bustCache);
-    }
-
-    /**
-     * Strip HTML tags from text
-     */
-    private stripHtml(html: string): string {
-        return html.replace(/<[^>]*>/g, '').trim();
-    }
 
     /**
      * Format epoch timestamp to readable date

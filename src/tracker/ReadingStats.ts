@@ -25,6 +25,8 @@ export interface BookWithProgress {
     status: string;
     coverUrl?: string;       // Remote URL from Pocketbook
     localCoverPath?: string; // Local path in vault (Attachments folder)
+    pageCount?: number;      // Total pages (if set by user)
+    currentPage?: number;    // Calculated: Math.round(progress * pageCount / 100)
 }
 
 /**
@@ -201,15 +203,24 @@ export class ReadingStats {
      */
     async getCurrentlyReadingWithProgress(books: PocketbookCloudBook[]): Promise<BookWithProgress[]> {
         const reading = this.getBooksCurrentlyReading(books);
+        const bookPageCounts = await this.database.getAllBookPageCounts();
 
-        return reading.map(book => ({
-            bookId: book.fast_hash,
-            title: book.title,
-            authors: book.metadata?.authors || '',
-            progress: (book as any).read_percent ?? parseFloat((book as any).percent || '0') ?? 0,
-            status: book.read_status,
-            coverUrl: book.metadata?.cover?.[0]?.path,
-        }));
+        return reading.map(book => {
+            const progress = (book as any).read_percent ?? parseFloat((book as any).percent || '0') ?? 0;
+            const pageCount = bookPageCounts[book.fast_hash];
+            const currentPage = pageCount ? Math.round((progress / 100) * pageCount) : undefined;
+
+            return {
+                bookId: book.fast_hash,
+                title: book.title,
+                authors: book.metadata?.authors || '',
+                progress,
+                status: book.read_status,
+                coverUrl: book.metadata?.cover?.[0]?.path,
+                pageCount,
+                currentPage,
+            };
+        });
     }
 
     /**

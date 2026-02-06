@@ -3,6 +3,7 @@ import PocketbookCloudHighlightsImporterPlugin from '../main';
 import { ReadingDatabase, ReadingActivity } from './ReadingDatabase';
 import { ReadingStats, DashboardStats, BookWithProgress } from './ReadingStats';
 import { PocketbookCloudBook } from '../apiclient';
+import { WishlistManager, WishlistBook } from './WishlistManager';
 
 /**
  * Core tracking logic that integrates with the sync process
@@ -10,6 +11,7 @@ import { PocketbookCloudBook } from '../apiclient';
 export class ReadingTracker {
     private database: ReadingDatabase;
     private stats: ReadingStats;
+    private wishlistManager: WishlistManager;
     private cachedBooks: PocketbookCloudBook[] = [];
 
     constructor(
@@ -21,13 +23,22 @@ export class ReadingTracker {
             this.database,
             plugin.settings.estimatedPagesPerBook || 300
         );
+        this.wishlistManager = new WishlistManager(app, plugin);
     }
 
     /**
-     * Initialize the tracker (load data)
+     * Initialize the tracker (load data and start file watcher)
      */
     async initialize(): Promise<void> {
         await this.database.load();
+        this.database.startFileWatcher(); // Watch for external changes (e.g., from Remotely Save)
+    }
+
+    /**
+     * Clean up resources (stop file watcher)
+     */
+    destroy(): void {
+        this.database.stopFileWatcher();
     }
 
     /**
@@ -232,6 +243,21 @@ export class ReadingTracker {
     }
 
     /**
+     * Get the wishlist manager
+     */
+    getWishlistManager(): WishlistManager {
+        return this.wishlistManager;
+    }
+
+    /**
+     * Get wishlist items as PocketbookCloudBook objects for UI
+     */
+    async getWishlistAsBooks(): Promise<PocketbookCloudBook[]> {
+        const wishlist = await this.wishlistManager.getWishlistBooks();
+        return wishlist.map(wb => this.wishlistManager.toPocketbookBook(wb));
+    }
+
+    /**
      * Get completed books with their details
      */
     async getCompletedBooks(): Promise<BookWithProgress[]> {
@@ -248,10 +274,11 @@ export class ReadingTracker {
     }
 
     /**
-     * Enrich books with local cover paths
+     * Enrich books with local cover paths and page count info
      */
     private async enrichBooksWithCovers(books: PocketbookCloudBook[]): Promise<BookWithProgress[]> {
         const coversFolder = this.plugin.settings.covers_folder || 'Attachments';
+        const bookPageCounts = await this.database.getAllBookPageCounts();
 
         return books.map(book => {
             const progress = (book as any).read_percent ?? parseFloat((book as any).percent || '0') ?? 0;
@@ -261,6 +288,10 @@ export class ReadingTracker {
             // Check if local cover exists
             const coverFile = this.app.vault.getAbstractFileByPath(localCoverPath);
 
+            // Get page count and calculate current page
+            const pageCount = bookPageCounts[book.fast_hash];
+            const currentPage = pageCount ? Math.round((progress / 100) * pageCount) : undefined;
+
             return {
                 bookId: book.fast_hash,
                 title: book.title,
@@ -269,6 +300,8 @@ export class ReadingTracker {
                 status: book.read_status,
                 coverUrl: book.metadata?.cover?.[0]?.path,
                 localCoverPath: coverFile ? localCoverPath : undefined,
+                pageCount,
+                currentPage,
             };
         });
     }
@@ -348,5 +381,18 @@ export class ReadingTracker {
      */
     getCoversFolder(): string {
         return this.plugin.settings.covers_folder || 'Attachments';
+    }
+
+    public async reconcileWishlist(ownedBooks: PocketbookCloudBook[]) {
+        const wishlistManager = this.getWishlistManager();
+        const wishlistItems = await wishlistManager.getWishlistBooks();
+        const ownedTitles = new Set(ownedBooks.map(b => b.title.toLowerCase().trim()));
+
+        for (const item of wishlistItems) {
+            if (item.title && ownedTitles.has(item.title.toLowerCase().trim())) {
+                console.log(`[Wishlist] Book '${item.title}' found in library. Removing from wishlist.`);
+                await wishlistManager.removeFromWishlist(item.id, true);
+            }
+        }
     }
 }

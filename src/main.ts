@@ -1,4 +1,4 @@
-import { Plugin, Notice } from 'obsidian';
+import { Plugin, Notice, TFile } from 'obsidian';
 import { PocketbookCloudHighlightsImporter } from './import';
 import { DEFAULT_SETTINGS, PocketbookCloudHighlightsImporterPluginSettings, PocketbookCloudHighlightsImporterSettingTab } from './settings';
 import { ReadingTracker } from './tracker/ReadingTracker';
@@ -105,10 +105,18 @@ export default class PocketbookCloudHighlightsImporterPlugin extends Plugin {
 
     // This adds a settings tab so the user can configure various aspects of the plugin
     this.addSettingTab(new PocketbookCloudHighlightsImporterSettingTab(this.app, this));
+
+    // Apply theme (bookshelf texture)
+    await this.applyTheme();
   }
 
   async onunload() {
     await this.saveCache();
+
+    // Clean up reading tracker (stop file watcher)
+    if (this.tracker) {
+      this.tracker.destroy();
+    }
 
     // Clean up dashboard view
     this.app.workspace.detachLeavesOfType(DASHBOARD_VIEW_TYPE);
@@ -182,7 +190,8 @@ export default class PocketbookCloudHighlightsImporterPlugin extends Plugin {
     // Reconfigure Auto Sync
     this.configureAutoSync();
 
-
+    // Re-apply theme
+    await this.applyTheme();
   }
 
   /**
@@ -216,6 +225,74 @@ export default class PocketbookCloudHighlightsImporterPlugin extends Plugin {
   }
 
 
+
+  /**
+   * Apply theme settings (bookshelf texture)
+   * Loads custom texture from vault or uses the default CSS texture
+   */
+  async applyTheme() {
+    const root = document.documentElement;
+
+    if (this.settings.useDefaultBookshelfTexture) {
+      // Remove custom texture, let CSS use the default from :root
+      root.style.removeProperty('--wood-texture');
+      console.log('[Pocketbook] Using default bookshelf texture');
+    } else if (this.settings.bookshelfTexture) {
+      // Load custom texture from vault
+      try {
+        const texturePath = this.settings.bookshelfTexture;
+        const file = this.app.vault.getAbstractFileByPath(texturePath);
+
+        if (file instanceof TFile) {
+          const arrayBuffer = await this.app.vault.readBinary(file);
+          const base64 = this.arrayBufferToBase64(arrayBuffer);
+          const mimeType = this.getMimeType(file.extension);
+          const dataUri = `url('data:${mimeType};base64,${base64}')`;
+
+          root.style.setProperty('--wood-texture', dataUri);
+          console.log('[Pocketbook] Applied custom bookshelf texture:', texturePath);
+        } else {
+          console.warn('[Pocketbook] Texture file not found:', texturePath);
+          // Fall back to default
+          root.style.removeProperty('--wood-texture');
+        }
+      } catch (e) {
+        console.error('[Pocketbook] Failed to load custom texture:', e);
+        root.style.removeProperty('--wood-texture');
+      }
+    } else {
+      // No texture selected - use solid color (remove the texture)
+      root.style.setProperty('--wood-texture', 'none');
+      console.log('[Pocketbook] Bookshelf texture disabled (solid color)');
+    }
+  }
+
+  /**
+   * Convert ArrayBuffer to base64 string
+   */
+  private arrayBufferToBase64(buffer: ArrayBuffer): string {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+  }
+
+  /**
+   * Get MIME type from file extension
+   */
+  private getMimeType(extension: string): string {
+    const mimeTypes: Record<string, string> = {
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'webp': 'image/webp',
+      'svg': 'image/svg+xml',
+    };
+    return mimeTypes[extension.toLowerCase()] || 'image/jpeg';
+  }
 
   /**
    * Fetch library books and queue them for metadata pre-fetching

@@ -19,8 +19,14 @@ export interface PocketbookCloudHighlightsImporterPluginSettings {
   enableTracking: boolean;
   dailyReadingGoalPages: number;
   estimatedPagesPerBook: number;
-  yearlyGoal: number; // New setting
+  yearlyGoal: number;
   showStatusBarStreak: boolean;
+
+  // Dashboard Icon Settings
+  statIconLibrary: string;
+  statIconReading: string;
+  statIconPages: string;
+  statIconStreak: string;
 
   // Hardcover Integration
   hardcover_api_key: string;
@@ -35,6 +41,10 @@ export interface PocketbookCloudHighlightsImporterPluginSettings {
   // Cache Settings
 
   cacheFolder: string;
+
+  // Appearance / Theming
+  bookshelfTexture: string; // Vault path to custom texture image
+  useDefaultBookshelfTexture: boolean; // true = use factory wood texture, false = use custom or none
 }
 
 import { TemplatingService } from './templating';
@@ -59,6 +69,12 @@ export const DEFAULT_SETTINGS: PocketbookCloudHighlightsImporterPluginSettings =
   yearlyGoal: 20,
   showStatusBarStreak: true,
 
+  // Dashboard Icon Defaults
+  statIconLibrary: 'Attachments/library.svg',
+  statIconReading: 'Attachments/reading_now.svg',
+  statIconPages: 'Attachments/pages_today.svg',
+  statIconStreak: 'Attachments/streak.svg',
+
   // Hardcover Integration
   hardcover_api_key: '',
 
@@ -73,6 +89,10 @@ export const DEFAULT_SETTINGS: PocketbookCloudHighlightsImporterPluginSettings =
   // Cache Defaults
 
   cacheFolder: 'PocketbookCache',
+
+  // Appearance Defaults
+  bookshelfTexture: '',
+  useDefaultBookshelfTexture: true,
 };
 
 export class PocketbookCloudHighlightsImporterSettingTab extends PluginSettingTab {
@@ -338,6 +358,62 @@ export class PocketbookCloudHighlightsImporterSettingTab extends PluginSettingTa
           })
       );
 
+    // Dashboard Icons
+    containerEl.createEl('h4', { text: 'Dashboard Icons' });
+
+    new Setting(containerEl)
+      .setName('Library Icon')
+      .setDesc('Path to SVG file for the "My Library" stat card.')
+      .addText(text =>
+        text
+          .setPlaceholder('Attachments/library.svg')
+          .setValue(this.plugin.settings.statIconLibrary)
+          .onChange(async value => {
+            this.plugin.settings.statIconLibrary = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+
+    new Setting(containerEl)
+      .setName('Reading Now Icon')
+      .setDesc('Path to SVG file for the "Reading Now" stat card.')
+      .addText(text =>
+        text
+          .setPlaceholder('Attachments/reading_now.svg')
+          .setValue(this.plugin.settings.statIconReading)
+          .onChange(async value => {
+            this.plugin.settings.statIconReading = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Pages Today Icon')
+      .setDesc('Path to SVG file for the "Pages Today" stat card.')
+      .addText(text =>
+        text
+          .setPlaceholder('Attachments/pages_today.svg')
+          .setValue(this.plugin.settings.statIconPages)
+          .onChange(async value => {
+            this.plugin.settings.statIconPages = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Day Streak Icon')
+      .setDesc('Path to SVG file for the "Day Streak" stat card.')
+      .addText(text =>
+        text
+          .setPlaceholder('Attachments/streak.svg')
+          .setValue(this.plugin.settings.statIconStreak)
+          .onChange(async value => {
+            this.plugin.settings.statIconStreak = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
     // Data Management
     containerEl.createEl('h4', { text: 'Data Management' });
 
@@ -432,6 +508,53 @@ export class PocketbookCloudHighlightsImporterSettingTab extends PluginSettingTa
             await this.plugin.saveSettings();
           })
       );
+
+    // Appearance / Theming
+    containerEl.createEl('h3', { text: 'Appearance' });
+
+    new Setting(containerEl)
+      .setName('Use Default Bookshelf Texture')
+      .setDesc('Enable the factory "Dark Academia" wood texture for the Library bookshelf.')
+      .addToggle(toggle =>
+        toggle
+          .setValue(this.plugin.settings.useDefaultBookshelfTexture)
+          .onChange(async value => {
+            this.plugin.settings.useDefaultBookshelfTexture = value;
+            await this.plugin.saveSettings();
+            this.display(); // Refresh to show/hide custom texture setting
+          })
+      );
+
+    // Only show custom texture path if not using default
+    if (!this.plugin.settings.useDefaultBookshelfTexture) {
+      new Setting(containerEl)
+        .setName('Custom Bookshelf Texture')
+        .setDesc('Path to a seamless/tileable image in your vault (e.g., "Attachments/my-texture.jpg"). Leave empty for no texture (solid color).')
+        .addText(text =>
+          text
+            .setPlaceholder('Attachments/wood.jpg')
+            .setValue(this.plugin.settings.bookshelfTexture)
+            .onChange(async value => {
+              this.plugin.settings.bookshelfTexture = value.replace(/^\//, '');
+              await this.plugin.saveSettings();
+            })
+        );
+
+      new Setting(containerEl)
+        .setName('Reset to Default Texture')
+        .setDesc('Restore the original Dark Academia wood texture.')
+        .addButton(button =>
+          button
+            .setButtonText('Reset to Default')
+            .onClick(async () => {
+              this.plugin.settings.useDefaultBookshelfTexture = true;
+              this.plugin.settings.bookshelfTexture = '';
+              await this.plugin.saveSettings();
+              this.display();
+              new Notice('Bookshelf texture reset to default.');
+            })
+        );
+    }
   }
 } // End of SettingTab
 

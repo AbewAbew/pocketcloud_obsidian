@@ -1,4 +1,4 @@
-import { App, TFile } from 'obsidian';
+import { App, TFile, EventRef, Notice } from 'obsidian';
 import PocketbookCloudHighlightsImporterPlugin from '../main';
 
 /**
@@ -65,15 +65,75 @@ const DATA_FILE_NAME = 'reading-tracker-data.json';
 
 /**
  * Local JSON-based storage for reading progress snapshots
+ * Includes file-watching for external sync compatibility
  */
 export class ReadingDatabase {
     private data: ReadingData = DEFAULT_DATA;
     private loaded = false;
 
+    // File watcher state
+    private fileWatcherRef: EventRef | null = null;
+    private isSaving = false; // Flag to ignore our own saves
+    private reloadDebounceTimer: NodeJS.Timeout | null = null;
+    private lastKnownModTime: number = 0;
+
     constructor(
         private app: App,
         private plugin: PocketbookCloudHighlightsImporterPlugin
     ) { }
+
+    /**
+     * Start watching the data file for external changes (e.g., from Remotely Save)
+     */
+    startFileWatcher(): void {
+        if (this.fileWatcherRef) return; // Already watching
+
+        this.fileWatcherRef = this.app.vault.on('modify', async (file) => {
+            if (file.path !== DATA_FILE_NAME) return;
+            if (this.isSaving) {
+                // This change was from our own save, ignore it
+                console.log('[ReadingTracker] Ignoring self-triggered file change');
+                return;
+            }
+
+            // Debounce to handle rapid changes (e.g., during sync)
+            if (this.reloadDebounceTimer) {
+                clearTimeout(this.reloadDebounceTimer);
+            }
+
+            this.reloadDebounceTimer = setTimeout(async () => {
+                console.log('[ReadingTracker] External file change detected, reloading data...');
+                await this.reloadFromDisk();
+                new Notice('📚 Reading data synced from another device');
+            }, 1000); // Wait 1 second for sync to complete
+        });
+
+        console.log('[ReadingTracker] File watcher started');
+    }
+
+    /**
+     * Stop watching the data file
+     */
+    stopFileWatcher(): void {
+        if (this.fileWatcherRef) {
+            this.app.vault.offref(this.fileWatcherRef);
+            this.fileWatcherRef = null;
+        }
+        if (this.reloadDebounceTimer) {
+            clearTimeout(this.reloadDebounceTimer);
+            this.reloadDebounceTimer = null;
+        }
+        console.log('[ReadingTracker] File watcher stopped');
+    }
+
+    /**
+     * Reload data from disk (for external sync detection)
+     */
+    async reloadFromDisk(): Promise<void> {
+        this.loaded = false; // Force reload
+        await this.load();
+        console.log('[ReadingTracker] Data reloaded from disk');
+    }
 
     /**
      * Load data from the JSON file in vault root
@@ -116,6 +176,7 @@ export class ReadingDatabase {
      * Save data to the JSON file
      */
     async save(): Promise<void> {
+        this.isSaving = true; // Mark that we're saving to ignore file watcher
         try {
             const content = JSON.stringify(this.data, null, 2);
             const file = this.app.vault.getAbstractFileByPath(DATA_FILE_NAME);
@@ -128,6 +189,11 @@ export class ReadingDatabase {
             console.log('[ReadingTracker] Data saved successfully.');
         } catch (e) {
             console.error('[ReadingTracker] Failed to save data:', e);
+        } finally {
+            // Reset flag after a short delay to ensure file watcher event has passed
+            setTimeout(() => {
+                this.isSaving = false;
+            }, 100);
         }
     }
 
@@ -481,6 +547,33 @@ export class ReadingDatabase {
     async clearSnapshots(): Promise<void> {
         await this.ensureLoaded();
         this.data.snapshots = [];
+        await this.save();
+    }
+
+    /**
+     * Delete all activities and snapshots for a specific book.
+     * Used when abandoning a book (resetting progress to 0) to remove it from stats.
+     */
+    async deleteActivitiesForBook(bookId: string): Promise<void> {
+        await this.ensureLoaded();
+
+        // Remove activities for this book
+        const originalActivityCount = this.data.activities.length;
+        this.data.activities = this.data.activities.filter(a => a.bookId !== bookId);
+
+        // Remove snapshots for this book
+        const originalSnapshotCount = this.data.snapshots.length;
+        this.data.snapshots = this.data.snapshots.filter(s => s.bookId !== bookId);
+
+        // Recalculate streaks since we removed history
+        // This is complex because we'd need to replay history. 
+        // For now, we'll just accept that removing a book might leave streaks slightly inaccurate 
+        // until the next full recalculation, or we could try to rebuild streaks.
+        // A simple "reset and replay" might be too heavy here, so we will just save.
+        // Ideally, we should re-verify streaks. Let's reset relevant streak data if it was the last read book?
+        // For safety/simplicity, we just remove the data.
+
+        console.log(`[ReadingTracker] Removed ${originalActivityCount - this.data.activities.length} activities and ${originalSnapshotCount - this.data.snapshots.length} snapshots for book ${bookId}`);
         await this.save();
     }
 

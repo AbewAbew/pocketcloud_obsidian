@@ -3,6 +3,7 @@ import PocketbookCloudHighlightsImporterPlugin from '../main';
 import { PocketbookCloudBook } from '../apiclient';
 import { HardcoverClient, HardcoverBook } from '../hardcover';
 import { GoodreadsClient, GoodreadsBookData } from '../goodreads';
+import { WishlistBook } from '../tracker/WishlistManager';
 
 /**
  * Modal displaying detailed book information
@@ -17,14 +18,35 @@ export class BookDetailModal extends Modal {
 
     private displayedReviewsCount = 5;
 
-    constructor(app: App, plugin: PocketbookCloudHighlightsImporterPlugin, book: PocketbookCloudBook) {
+    private isPreview = false;
+    private wishlistBook: WishlistBook | null = null;
+    private isInWishlist = false;
+
+    constructor(
+        app: App,
+        plugin: PocketbookCloudHighlightsImporterPlugin,
+        book: PocketbookCloudBook,
+        isPreview = false,
+        wishlistBook?: WishlistBook
+    ) {
         super(app);
         this.plugin = plugin;
         this.book = book;
+        this.isPreview = isPreview;
+        this.wishlistBook = wishlistBook || null;
         this.displayedReviewsCount = this.plugin.settings.goodreadsReviewsLimit || 5;
     }
 
     async onOpen() {
+        // Check if in wishlist
+        const wishlistManager = this.plugin.tracker.getWishlistManager();
+        if (this.isPreview && this.wishlistBook?.goodreadsId) {
+            // Preview mode: Must check DB. ignore read_status as the mock object might have it set by default
+            this.isInWishlist = await wishlistManager.isInWishlist(this.wishlistBook.goodreadsId);
+        } else if (this.book.read_status === 'wishlist') {
+            this.isInWishlist = true;
+        }
+
         const { contentEl, modalEl } = this;
         modalEl.addClass('pocketbook-book-detail-modal');
         contentEl.addClass('book-detail-modal-content');
@@ -137,24 +159,66 @@ export class BookDetailModal extends Modal {
             cls: 'book-detail-title'
         });
 
-        // Add Refresh Button for metadata
-        const refreshBtn = titleContainer.createEl('button', { cls: 'metadata-refresh-btn', title: 'Start fresh fetch from Goodreads' });
-        refreshBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path><path d="M16 16h5v5"></path></svg>`;
-        refreshBtn.onclick = async (e) => {
-            e.stopPropagation();
-            refreshBtn.addClass('spinning');
-            this.goodreadsData = null; // Clear current data
-            // Show loading state
-            this.isLoadingGoodreads = true;
-            this.render();
+        // Add Wishlist Actions
+        if (this.isPreview && !this.isInWishlist) {
+            const addBtn = titleContainer.createEl('button', { cls: 'mod-cta wishlist-add-btn', text: 'Add to Wishlist' });
+            addBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (this.wishlistBook) {
+                    await this.plugin.tracker.getWishlistManager().addToWishlist(this.wishlistBook);
+                    this.isInWishlist = true;
+                    new Notice(`Added ${this.book.title} to wishlist`);
+                    this.close(); // Close modal on success? Or just update UI?
+                }
+            });
+        } else if (this.isInWishlist) {
+            const removeBtn = titleContainer.createEl('button', { cls: 'wishlist-remove-btn', text: 'Remove from Wishlist' });
+            removeBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                // We need the ID. If it's a wishlist book, ID is correct. 
+                // If it's a preview of a wishlist book, we use the wishlistBook ID.
+                const id = this.wishlistBook?.id || this.book.id;
+                await this.plugin.tracker.getWishlistManager().removeFromWishlist(id);
+                this.isInWishlist = false;
+                new Notice(`Removed ${this.book.title} from wishlist`);
+                this.close();
+            });
+        }
 
-            const title = this.book.metadata?.title || '';
-            const rawAuthors = this.book.metadata?.authors;
-            const author = Array.isArray(rawAuthors) ? rawAuthors[0] : (rawAuthors || '');
+        // Add Refresh Button for metadata (Hide if preview or wishlist)
+        if (!this.isPreview && !this.isInWishlist) {
+            const refreshBtn = titleContainer.createEl('button', { cls: 'metadata-refresh-btn', title: 'Start fresh fetch from Goodreads' });
+            refreshBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path><path d="M16 16h5v5"></path></svg>`;
+            refreshBtn.onclick = async (e) => {
+                e.stopPropagation();
+                refreshBtn.addClass('spinning');
+                this.goodreadsData = null; // Clear current data
+                // Show loading state
+                this.isLoadingGoodreads = true;
+                this.render();
 
-            await this.fetchGoodreadsData(title, author, true); // Force bust cache
-            refreshBtn.removeClass('spinning');
-        };
+                const title = this.book.metadata?.title || '';
+                const rawAuthors = this.book.metadata?.authors;
+                const author = Array.isArray(rawAuthors) ? rawAuthors[0] : (rawAuthors || '');
+
+                await this.fetchGoodreadsData(title, author, true); // Force bust cache
+                refreshBtn.removeClass('spinning');
+            };
+        }
+
+        // Add Abandon/Reset Button (Hide if preview/wishlist)
+        if (!this.isPreview && !this.isInWishlist) {
+            const abandonBtn = titleContainer.createEl('button', { cls: 'metadata-refresh-btn abandon-btn', title: 'Forget this book (Clear reading history)' });
+            // Trash icon
+            abandonBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`;
+            abandonBtn.onclick = async (e) => {
+                e.stopPropagation();
+                if (confirm(`Are you sure you want to "abandon" this book?\n\nThis will delete all reading history and page counts for "${this.book.metadata?.title}" from your stats/heatmaps.\n\nThis cannot be undone.`)) {
+                    await this.plugin.tracker.getDatabase().deleteActivitiesForBook(this.book.fast_hash);
+                    new Notice(`Reading history cleared for ${this.book.metadata?.title}`);
+                }
+            };
+        }
 
         // Author - handle string or array
         const rawAuthors = this.book.metadata?.authors;

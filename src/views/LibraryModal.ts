@@ -2,6 +2,7 @@ import { App, Modal, TFile, Notice, Setting } from 'obsidian';
 import PocketbookCloudHighlightsImporterPlugin from '../main';
 import { PocketbookCloudBook } from '../apiclient';
 import { BookDetailModal } from './BookDetailModal';
+import { AddBookModal } from './AddBookModal';
 
 /**
  * Simple modal for entering page count
@@ -77,8 +78,10 @@ export class LibraryModal extends Modal {
     private plugin: PocketbookCloudHighlightsImporterPlugin;
     private books: PocketbookCloudBook[];
     private filteredBooks: PocketbookCloudBook[];
-    private currentFilter: 'all' | 'reading' | 'completed' | 'not-started' = 'all';
+    private wishlistBooks: PocketbookCloudBook[] = [];
+    private currentFilter: 'all' | 'reading' | 'completed' | 'not-started' | 'wishlist' = 'all';
     private searchQuery = '';
+    private resizeHandler: () => void;
 
     constructor(app: App, plugin: PocketbookCloudHighlightsImporterPlugin, books: PocketbookCloudBook[]) {
         super(app);
@@ -87,66 +90,108 @@ export class LibraryModal extends Modal {
         this.filteredBooks = books;
     }
 
-    onOpen() {
-        const { contentEl } = this;
+    async onOpen() {
+        const { contentEl, modalEl } = this;
+        // Add class to modal shell for wider styling
+        modalEl.addClass('pocketbook-library-modal');
         contentEl.addClass('library-modal');
+
+        // Reconcile wishlist with owned books to remove duplicates
+        await this.plugin.tracker.reconcileWishlist(this.books);
+
+        // Load wishlist
+        this.wishlistBooks = await this.plugin.tracker.getWishlistAsBooks();
+
         this.render();
+
+        // Add resize listener to update layout dynamically
+        this.resizeHandler = () => {
+            const bookshelf = contentEl.querySelector('.library-bookshelf') as HTMLElement;
+            if (bookshelf) {
+                this.renderBooks(bookshelf);
+            }
+        };
+        window.addEventListener('resize', this.resizeHandler);
     }
 
     private render() {
         const { contentEl } = this;
         contentEl.empty();
 
-        // Header
-        const header = contentEl.createDiv({ cls: 'library-header' });
-        header.createEl('h2', { text: '📚 My Library' });
-        header.createEl('p', { cls: 'library-subtitle', text: `${this.books.length} books` });
 
-        // Search bar
-        const searchContainer = contentEl.createDiv({ cls: 'library-search' });
+
+        // Crown Molding (Top of the Cabinet) - Contains Search and Filters
+        const crownMolding = contentEl.createDiv({ cls: 'library-crown-molding' });
+
+        // Search bar (embedded in molding)
+        const searchContainer = crownMolding.createDiv({ cls: 'library-search' });
         const searchInput = searchContainer.createEl('input', {
             type: 'text',
-            placeholder: 'Search by title or author...',
+            placeholder: 'Search library...',
             cls: 'library-search-input'
         });
         searchInput.value = this.searchQuery;
         searchInput.addEventListener('input', (e) => {
             this.searchQuery = (e.target as HTMLInputElement).value;
             this.applyFilters();
-            this.renderBooks(contentEl.querySelector('.library-grid') as HTMLElement);
+            const bookshelf = contentEl.querySelector('.library-bookshelf') as HTMLElement;
+            if (bookshelf) this.renderBooks(bookshelf);
         });
 
-        // Filter tabs
-        const filterTabs = contentEl.createDiv({ cls: 'library-filters' });
+        // Filter tabs (embedded in molding)
+        const filterTabs = crownMolding.createDiv({ cls: 'library-filters' });
         const filters: { key: typeof this.currentFilter; label: string }[] = [
             { key: 'all', label: 'All' },
             { key: 'reading', label: 'Reading' },
             { key: 'completed', label: 'Completed' },
-            { key: 'not-started', label: 'Not Started' }
+            { key: 'not-started', label: 'Not Started' },
+            { key: 'wishlist', label: 'Wishlist' }
         ];
+
+        // Add Book Button (Right aligned)
+        const addBtn = crownMolding.createEl('button', {
+            text: '+',
+            cls: 'library-add-btn',
+            title: 'Add to Wishlist'
+        });
+        addBtn.addEventListener('click', () => {
+            new AddBookModal(this.app, this.plugin).open();
+            // We might want to refresh the library after adding?
+            // But the modal stays open. When AddBookModal closes or adds, we don't know easily.
+            // We can refresh on tab switch.
+        });
 
         filters.forEach(filter => {
             const tab = filterTabs.createEl('button', {
                 text: filter.label,
                 cls: `filter-tab ${this.currentFilter === filter.key ? 'active' : ''}`
             });
-            tab.addEventListener('click', () => {
+            tab.addEventListener('click', async () => {
                 this.currentFilter = filter.key;
+                if (filter.key === 'wishlist') {
+                    // Refresh wishlist to ensure we see newly added books
+                    this.wishlistBooks = await this.plugin.tracker.getWishlistAsBooks();
+                }
                 this.applyFilters();
                 this.render();
             });
         });
 
-        // Books grid
-        const grid = contentEl.createDiv({ cls: 'library-grid' });
-        this.renderBooks(grid);
-
+        // Bookshelf container (replaces grid)
+        const bookshelf = contentEl.createDiv({ cls: 'library-bookshelf' });
+        this.renderBooks(bookshelf);
 
         this.addStyles();
     }
 
     private applyFilters() {
-        let filtered = [...this.books];
+        let filtered: PocketbookCloudBook[] = [];
+
+        if (this.currentFilter === 'wishlist') {
+            filtered = [...this.wishlistBooks];
+        } else {
+            filtered = [...this.books];
+        }
 
         // Apply status filter
         if (this.currentFilter !== 'all') {
@@ -182,282 +227,177 @@ export class LibraryModal extends Modal {
         this.filteredBooks = filtered;
     }
 
-    private async renderBooks(grid: HTMLElement) {
-        grid.empty();
+    private async renderBooks(bookshelf: HTMLElement) {
+        bookshelf.empty();
 
         if (this.filteredBooks.length === 0) {
-            grid.createEl('p', { text: 'No books found', cls: 'library-empty' });
+            const emptyShelf = bookshelf.createDiv({ cls: 'library-shelf-row empty-shelf' });
+            emptyShelf.createEl('p', { text: 'No books found', cls: 'library-empty' });
             return;
         }
 
         // Fetch all page counts for efficient lookup
         const pageCounts = await this.plugin.tracker.getDatabase().getAllBookPageCounts();
 
-        this.filteredBooks.forEach(book => {
-            const card = grid.createDiv({ cls: 'library-book-card' });
-            card.addEventListener('click', () => {
-                new BookDetailModal(this.app, this.plugin, book).open();
-            });
+        // Calculate books per row dynamically based on window width
+        const BOOKS_PER_ROW = this.calculateBooksPerRow();
 
-            // Cover
-            const coverContainer = card.createDiv({ cls: 'library-cover' });
-            const coverUrl = book.metadata?.cover?.[0]?.path;
+        const chunks: PocketbookCloudBook[][] = [];
+        for (let i = 0; i < this.filteredBooks.length; i += BOOKS_PER_ROW) {
+            chunks.push(this.filteredBooks.slice(i, i + BOOKS_PER_ROW));
+        }
 
-            if (coverUrl) {
-                const img = coverContainer.createEl('img');
-                img.src = coverUrl;
-                img.alt = book.metadata?.title || 'Book cover';
-                img.loading = 'lazy';
-                img.onerror = () => {
-                    img.remove();
-                    coverContainer.createEl('span', { text: '📖', cls: 'cover-placeholder-icon' });
-                };
-            } else {
-                coverContainer.createEl('span', { text: '📖', cls: 'cover-placeholder-icon' });
-            }
+        // Render each shelf row
+        chunks.forEach(rowBooks => {
+            const shelfRow = bookshelf.createDiv({ cls: 'library-shelf-row' });
+            const booksContainer = shelfRow.createDiv({ cls: 'library-shelf-books' });
 
-            // Progress indicator
-            const progress = (book as any).read_percent ?? parseFloat((book as any).percent || '0') ?? 0;
-            if (progress > 0) {
-                const progressBadge = card.createDiv({ cls: 'library-progress-badge' });
-                progressBadge.setText(`${progress}%`);
-                if (progress === 100) progressBadge.addClass('completed');
-            }
+            rowBooks.forEach(book => {
+                const card = booksContainer.createDiv({ cls: 'library-book-card' });
+                card.addEventListener('click', () => {
+                    new BookDetailModal(this.app, this.plugin, book).open();
+                });
 
-            // For books at 0% progress, show "Set Pages" button
-            // Also update it if we already have a page count saved
-            const savedPages = pageCounts[book.fast_hash];
-            if (progress === 0 || savedPages) {
-                const setPagesBtn = card.createEl('button', { cls: 'library-set-pages-btn' });
+                // Cover
+                const coverContainer = card.createDiv({ cls: 'library-cover' });
+                const coverUrl = book.metadata?.cover?.[0]?.path;
 
-                if (savedPages) {
-                    setPagesBtn.setText(`📄 ${savedPages}p`);
-                    setPagesBtn.addClass('has-pages');
+                if (coverUrl) {
+                    const img = coverContainer.createEl('img');
+                    img.src = coverUrl;
+                    img.alt = book.metadata?.title || 'Book cover';
+                    img.loading = 'lazy';
+                    img.onerror = () => {
+                        img.remove();
+                        coverContainer.createEl('span', { text: '📖', cls: 'cover-placeholder-icon' });
+                    };
                 } else {
-                    setPagesBtn.setText('📄 Set Pages');
+                    coverContainer.createEl('span', { text: '📖', cls: 'cover-placeholder-icon' });
                 }
 
-                setPagesBtn.addEventListener('click', async (e) => {
-                    e.preventDefault();
-                    e.stopPropagation(); // Don't open book detail modal
-                    e.stopImmediatePropagation();
+                // 3D Book pages (stacked behind cover)
+                for (let i = 1; i <= 5; i++) {
+                    card.createDiv({ cls: `library-book-page page-${i}` });
+                }
+                // Back cover
+                card.createDiv({ cls: 'library-book-back' });
 
-                    const currentPageCount = await this.plugin.tracker.getDatabase().getBookPageCount(book.fast_hash);
-                    const bookTitle = book.metadata?.title || book.title;
+                // Progress indicator
+                const progress = (book as any).read_percent ?? parseFloat((book as any).percent || '0') ?? 0;
+                if (progress > 0) {
+                    const progressBadge = card.createDiv({ cls: 'library-progress-badge' });
+                    progressBadge.setText(`${progress}%`);
+                    if (progress === 100) progressBadge.addClass('completed');
+                }
 
-                    new PageCountModal(
-                        this.app,
-                        bookTitle,
-                        currentPageCount?.toString() || '',
-                        async (newPageCount) => {
-                            if (newPageCount && newPageCount > 0) {
-                                await this.plugin.tracker.getDatabase().setBookPageCount(book.fast_hash, newPageCount);
-                                // No manual save needed, setBookPageCount saves now. But to be safe vs race conditions:
-                                // await this.plugin.tracker.getDatabase().save(); 
+                // For books at 0% progress, show "Set Pages" button
+                // Also update it if we already have a page count saved
+                const savedPages = pageCounts[book.fast_hash];
+                // Only show Set Pages for books in library (not wishlist)
+                if (book.read_status !== 'wishlist' && (progress === 0 || savedPages)) {
+                    const setPagesBtn = card.createEl('button', { cls: 'library-set-pages-btn' });
 
-                                // Update button to show page count
-                                setPagesBtn.setText(`📄 ${newPageCount}p`);
-                                setPagesBtn.addClass('has-pages');
-                                new Notice(`Set ${bookTitle} to ${newPageCount} pages`);
+                    if (savedPages) {
+                        setPagesBtn.setText(`📄 ${savedPages}p`);
+                        setPagesBtn.addClass('has-pages');
+                    } else {
+                        setPagesBtn.setText('📄 Set Pages');
+                    }
+
+                    setPagesBtn.addEventListener('click', async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation(); // Don't open book detail modal
+                        e.stopImmediatePropagation();
+
+                        const currentPageCount = await this.plugin.tracker.getDatabase().getBookPageCount(book.fast_hash);
+                        const bookTitle = book.metadata?.title || book.title;
+
+                        new PageCountModal(
+                            this.app,
+                            bookTitle,
+                            currentPageCount?.toString() || '',
+                            async (newPageCount) => {
+                                if (newPageCount && newPageCount > 0) {
+                                    await this.plugin.tracker.getDatabase().setBookPageCount(book.fast_hash, newPageCount);
+
+                                    // Update button to show page count
+                                    setPagesBtn.setText(`📄 ${newPageCount}p`);
+                                    setPagesBtn.addClass('has-pages');
+                                    new Notice(`Set ${bookTitle} to ${newPageCount} pages`);
+                                }
                             }
-                        }
-                    ).open();
-                });
-            }
+                        ).open();
+                    });
+                }
 
-            // Info
-            const info = card.createDiv({ cls: 'library-book-info' });
-            info.createEl('div', {
-                text: book.metadata?.title || 'Unknown Title',
-                cls: 'library-book-title'
+                // Calculate and set dynamic book thickness
+                // User requested that we ONLY use dynamic size if the user has manually set the pages.
+                // If savedPages is undefined/0, we use a fixed default size (350 pages equivalent)
+                // so all unset books look uniform until interacted with.
+                const estimatedPages = savedPages ? savedPages : 350;
+                const thickness = this.calculateBookThickness(estimatedPages);
+                card.style.setProperty('--book-thickness', thickness);
+
+                // Book title tooltip (since we're removing the visible text)
+                card.setAttribute('title', `${book.metadata?.title || 'Unknown Title'} (${estimatedPages} p)`);
             });
-            // Authors can be string or array
-            const rawAuthors = book.metadata?.authors;
-            const authorDisplay = Array.isArray(rawAuthors)
-                ? rawAuthors[0]
-                : (rawAuthors || 'Unknown Author');
-            info.createEl('div', {
-                text: authorDisplay,
-                cls: 'library-book-author'
-            });
+
+            // Add the shelf surface (the wooden edge)
+            shelfRow.createDiv({ cls: 'library-shelf-surface' });
         });
     }
 
-    private addStyles() {
-        const styleId = 'library-modal-styles';
-        if (document.getElementById(styleId)) return;
-
-        const style = document.createElement('style');
-        style.id = styleId;
-        style.textContent = `
-            .library-modal {
-                padding: 20px;
-                max-height: 80vh;
-                overflow-y: auto;
-            }
-
-            .library-header {
-                margin-bottom: 16px;
-            }
-
-            .library-header h2 {
-                margin: 0 0 4px 0;
-            }
-
-            .library-subtitle {
-                color: var(--text-muted);
-                margin: 0;
-            }
-
-            .library-search {
-                margin-bottom: 16px;
-            }
-
-            .library-search-input {
-                width: 100%;
-                padding: 10px 14px;
-                border-radius: 8px;
-                border: 1px solid var(--background-modifier-border);
-                background: var(--background-primary);
-                font-size: 0.95em;
-            }
-
-            .library-filters {
-                display: flex;
-                gap: 8px;
-                margin-bottom: 20px;
-                flex-wrap: wrap;
-            }
-
-            .filter-tab {
-                padding: 6px 14px;
-                border-radius: 20px;
-                border: 1px solid var(--background-modifier-border);
-                background: var(--background-secondary);
-                cursor: pointer;
-                font-size: 0.85em;
-                transition: all 0.2s;
-            }
-
-            .filter-tab:hover {
-                border-color: var(--interactive-accent);
-            }
-
-            .filter-tab.active {
-                background: var(--interactive-accent);
-                color: var(--text-on-accent);
-                border-color: var(--interactive-accent);
-            }
-
-            .library-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-                gap: 16px;
-            }
-
-            .library-book-card {
-                cursor: pointer;
-                transition: transform 0.2s;
-                position: relative;
-            }
-
-            .library-book-card:hover {
-                transform: translateY(-4px);
-            }
-
-            .library-cover {
-                width: 100%;
-                aspect-ratio: 2/3;
-                border-radius: 6px;
-                overflow: hidden;
-                background: var(--background-secondary);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-            }
-
-            .library-cover img {
-                width: 100%;
-                height: 100%;
-                object-fit: cover;
-            }
-
-            .cover-placeholder-icon {
-                font-size: 2.5em;
-            }
-
-            .library-progress-badge {
-                position: absolute;
-                top: 6px;
-                right: 6px;
-                background: rgba(0, 0, 0, 0.7);
-                color: white;
-                padding: 2px 6px;
-                border-radius: 4px;
-                font-size: 0.7em;
-                font-weight: bold;
-            }
-
-            .library-progress-badge.completed {
-                background: #22c55e;
-            }
-
-            .library-book-info {
-                padding: 8px 0;
-            }
-
-            .library-book-title {
-                font-weight: 600;
-                font-size: 0.85em;
-                line-height: 1.3;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                display: -webkit-box;
-                -webkit-line-clamp: 2;
-                -webkit-box-orient: vertical;
-            }
-
-            .library-book-author {
-                font-size: 0.75em;
-                color: var(--text-muted);
-                margin-top: 2px;
-            }
-
-            .library-empty {
-                grid-column: 1 / -1;
-                text-align: center;
-                color: var(--text-muted);
-                padding: 40px;
-            }
-
-            .library-set-pages-btn {
-                position: absolute;
-                top: 6px;
-                right: 6px;
-                background: rgba(0, 0, 0, 0.8);
-                color: white;
-                padding: 4px 8px;
-                border-radius: 4px;
-                font-size: 0.65em;
-                cursor: pointer;
-                transition: all 0.2s;
-                z-index: 10;
-            }
-
-            .library-set-pages-btn:hover {
-                background: var(--interactive-accent);
-            }
-
-            .library-set-pages-btn.has-pages {
-                background: rgba(34, 197, 94, 0.9);
-            }
-        `;
-        document.head.appendChild(style);
+    private calculateBooksPerRow(): number {
+        const width = window.innerWidth;
+        if (width < 600) {
+            return 2; // Mobile phones
+        } else if (width < 900) {
+            return 3; // Tablets / Small modals
+        } else {
+            return 4; // Desktop
+        }
     }
+
+    private addStyles() {
+        // Styles are now defined in styles.css
+        // This function is kept for backwards compatibility but does nothing
+    }
+
+    /**
+     * Calculate book thickness based on page count.
+     * Maps 200-1200 pages to a pixel range (e.g. 20px - 60px)
+     */
+    private calculateBookThickness(pageCount: number): string {
+        const minPages = 50;
+        const maxPages = 1200;
+        const minThickness = 12; // px
+        const midThickness = 40; // px at 350 pages
+        const maxThickness = 100; // px
+
+        let thickness: number;
+        // Clamp page count
+        const pages = Math.max(minPages, Math.min(pageCount, maxPages));
+
+        if (pages <= 350) {
+            // Steeper curve for common book sizes (50-350 pages)
+            // Maps 50->12px, 350->40px
+            thickness = minThickness + ((pages - minPages) / (350 - minPages)) * (midThickness - minThickness);
+        } else {
+            // Flatter curve for larger books (350-1200 pages)
+            // Maps 350->40px, 1200->100px
+            thickness = midThickness + ((pages - 350) / (maxPages - 350)) * (maxThickness - midThickness);
+        }
+
+        return `${Math.round(thickness)}px`;
+    }
+
 
     onClose() {
         const { contentEl } = this;
+        // Clean up event listener
+        if (this.resizeHandler) {
+            window.removeEventListener('resize', this.resizeHandler);
+        }
         contentEl.empty();
     }
 }

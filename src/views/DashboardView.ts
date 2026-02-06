@@ -1,7 +1,6 @@
 import { ItemView, WorkspaceLeaf, Notice, TFile } from 'obsidian';
 import PocketbookCloudHighlightsImporterPlugin from '../main';
 import { DashboardStats, BookWithProgress } from '../tracker/ReadingStats';
-import { CompletedBooksModal } from './CompletedBooksModal';
 import { LibraryModal } from './LibraryModal';
 import { generateReadingAnalytics, ReadingAnalytics, getHeatmapData } from '../tracker/ReadingAnalytics';
 
@@ -60,7 +59,7 @@ export class DashboardView extends ItemView {
 
     // Header
     const header = container.createDiv({ cls: 'dashboard-header' });
-    header.createEl('h2', { text: '📚 Reading Dashboard' });
+    header.createEl('h2', { text: 'Reading Dashboard' });
 
     const refreshBtn = header.createEl('button', {
       text: '↻ Refresh',
@@ -89,7 +88,7 @@ export class DashboardView extends ItemView {
       // Get data
       const stats = await this.plugin.tracker.getDashboardStats();
       const currentlyReading = await this.plugin.tracker.getCurrentlyReadingWithCovers();
-      const recentActivity = await this.plugin.tracker.getRecentActivityFeed(10);
+      const recentActivity = await this.plugin.tracker.getRecentActivityFeed(5);
 
       // Get analytics data
       const analytics = await generateReadingAnalytics(
@@ -162,22 +161,11 @@ export class DashboardView extends ItemView {
       value: allBooks.length.toString(),
       label: 'My Library',
       icon: '📚',
+      iconType: 'library',
       clickable: true,
     });
     libraryCard.addEventListener('click', () => {
       new LibraryModal(this.app, this.plugin, allBooks).open();
-    });
-
-    // Total Books Completed - CLICKABLE
-    const booksCard = this.createStatCard(cardsContainer, {
-      value: stats.booksReadThisYear.toString(),
-      label: 'Books Completed',
-      icon: '📖',
-      clickable: true,
-    });
-    booksCard.addEventListener('click', async () => {
-      const completedBooks = await this.plugin.tracker.getCompletedBooks();
-      new CompletedBooksModal(this.app, this.plugin, completedBooks).open();
     });
 
     // Currently Reading
@@ -185,6 +173,7 @@ export class DashboardView extends ItemView {
       value: stats.currentlyReading.toString(),
       label: 'Reading Now',
       icon: '📕',
+      iconType: 'reading',
     });
 
     // Pages Today
@@ -192,14 +181,16 @@ export class DashboardView extends ItemView {
       value: `~${stats.estimatedPagesToday}`,
       label: 'Pages Today',
       icon: '📄',
+      iconType: 'pages',
     });
 
     // Current Streak
     if (stats.currentStreak > 0) {
       this.createStatCard(cardsContainer, {
-        value: `${stats.currentStreak} 🔥`,
+        value: `${stats.currentStreak}`,
         label: 'Day Streak',
         icon: '🏆',
+        iconType: 'streak',
       });
     }
   }
@@ -209,13 +200,49 @@ export class DashboardView extends ItemView {
    */
   private createStatCard(
     container: HTMLElement,
-    data: { value: string; label: string; icon: string; clickable?: boolean }
+    data: { value: string; label: string; icon: string; iconType?: 'library' | 'reading' | 'pages' | 'streak'; clickable?: boolean }
   ): HTMLElement {
     const card = container.createDiv({ cls: 'stat-card' + (data.clickable ? ' stat-card-clickable' : '') });
-    card.createDiv({ cls: 'stat-icon', text: data.icon });
+
+    // Create icon container
+    const iconContainer = card.createDiv({ cls: 'stat-icon-btn' + (data.iconType ? ` stat-icon-${data.iconType}` : '') });
+
+    // Load SVG from vault or fallback to emoji
+    if (data.iconType) {
+      this.loadStatIconFromVault(iconContainer, data.iconType, data.icon);
+    } else {
+      iconContainer.textContent = data.icon;
+    }
+
     card.createDiv({ cls: 'stat-value', text: data.value });
     card.createDiv({ cls: 'stat-label', text: data.label });
     return card;
+  }
+
+  /**
+   * Load SVG icon from vault using path from settings
+   */
+  private loadStatIconFromVault(container: HTMLElement, type: 'library' | 'reading' | 'pages' | 'streak', fallbackEmoji: string): void {
+    const settings = this.plugin.settings;
+    const iconPaths: Record<string, string> = {
+      library: settings.statIconLibrary || 'Attachments/library.svg',
+      reading: settings.statIconReading || 'Attachments/reading_now.svg',
+      pages: settings.statIconPages || 'Attachments/pages_today.svg',
+      streak: settings.statIconStreak || 'Attachments/streak.svg',
+    };
+
+    const filePath = iconPaths[type];
+
+    const file = this.app.vault.getAbstractFileByPath(filePath);
+    if (file instanceof TFile) {
+      const img = container.createEl('img');
+      img.src = this.app.vault.getResourcePath(file);
+      img.alt = type;
+      img.addClass('stat-icon-img');
+    } else {
+      // Fallback to emoji if file not found
+      container.textContent = fallbackEmoji;
+    }
   }
 
   /**
@@ -278,20 +305,26 @@ export class DashboardView extends ItemView {
 
       // Progress bar - apply inline styles to override theme
       const progressContainer = bookContent.createDiv({ cls: 'progress-container' });
+      // Progress bar - styles moved to class or adjusted here for theme
       const progressBar = progressContainer.createDiv({ cls: 'pocketbook-progress-bar' });
-      // Apply styles inline to ensure they override theme - use position relative for absolute child
-      progressBar.style.cssText = 'flex: 1; height: 12px; background: #000 !important; border-radius: 6px; overflow: hidden; border: 2px solid #888; position: relative;';
+      progressBar.style.cssText = 'flex: 1; height: 12px; background: #3e2b1f !important; border-radius: 6px; overflow: hidden; border: 1px solid #5d4037; position: relative;';
 
       const progressFill = progressBar.createDiv({ cls: 'pocketbook-progress-fill' });
-      // Green gradient fill
-      progressFill.style.cssText = `width: ${book.progress}%; height: 100%; background: linear-gradient(90deg, #22c55e, #4ade80) !important; position: absolute; top: 0; left: 0; border-radius: 5px;`;
+      // Gold gradient fill
+      progressFill.style.cssText = `width: ${book.progress}%; height: 100%; background: linear-gradient(90deg, #b8860b, #d4af37) !important; position: absolute; top: 0; left: 0; border-radius: 5px;`;
 
 
 
       const progressText = progressContainer.createDiv({ cls: 'progress-text' });
       // Show 1 decimal place if it's not a whole number
       const displayProgress = Number.isInteger(book.progress) ? book.progress : book.progress.toFixed(1);
-      progressText.setText(`${displayProgress}%`);
+
+      // Show page info if page count is available (Option A: compact format)
+      if (book.pageCount && book.currentPage !== undefined) {
+        progressText.setText(`Page ${book.currentPage} of ${book.pageCount} • ${displayProgress}%`);
+      } else {
+        progressText.setText(`${displayProgress}%`);
+      }
     }
   }
 
@@ -567,29 +600,38 @@ export class DashboardView extends ItemView {
 
     const goalBar = goalProgress.createDiv({ cls: 'goal-bar' });
     // Override standard style just in case
-    goalBar.style.cssText = 'width: 100%; height: 8px; background: #1a1a1a; border-radius: 4px; overflow: hidden;';
+    goalBar.style.cssText = 'width: 100%; height: 8px; background: #3e2b1f; border-radius: 4px; overflow: hidden; border: 1px solid #5d4037;';
 
     const goalFill = goalBar.createDiv({ cls: 'goal-fill' });
-    goalFill.style.cssText = `width: ${goalPercent}%; height: 100%; background: linear-gradient(90deg, #3b82f6, #8b5cf6); border-radius: 4px;`;
+    goalFill.style.cssText = `width: ${goalPercent}%; height: 100%; background: linear-gradient(90deg, #b8860b, #d4af37); border-radius: 4px;`;
 
     // Random Highlight Card (Full width below stats)
     const highlight = await this.plugin.tracker.getRandomHighlight();
     if (highlight) {
       const highlightSection = container.createDiv({ cls: 'dashboard-section highlight-section' });
-      highlightSection.style.marginTop = '24px';
-      highlightSection.createEl('h3', { text: '💡 Spark of Memory' });
+      highlightSection.createEl('h3', { text: 'Spark of Memory' });
 
-      const highlightCard = highlightSection.createDiv({ cls: 'stat-card' });
-      highlightCard.style.textAlign = 'left';
+      // Clean implementation without inline styles - mostly handled by CSS
+      const highlightCard = highlightSection.createDiv({ cls: 'stat-card highlight-card' });
 
-      const quoteEl = highlightCard.createEl('blockquote', { text: highlight.text });
-      quoteEl.style.fontStyle = 'italic';
-      quoteEl.style.margin = '0 0 12px 0';
-      quoteEl.style.borderLeft = '4px solid var(--interactive-accent)';
-      quoteEl.style.paddingLeft = '12px';
-      quoteEl.style.color = 'var(--text-normal)';
+      // Navigate to book on click
+      highlightCard.addClass('stat-card-clickable');
+      highlightCard.addEventListener('click', () => {
+        // Find the book helper to open it
+        // We might not have the book object here easily, but we have the ISBN/Title from highlight maybe?
+        // Actually highlight object structure depends on tracker.
+        // For now just keep simple display
+      });
+
+      const quoteEl = highlightCard.createEl('blockquote');
+      quoteEl.setText(`"${highlight.text}"`);
 
       const sourceEl = highlightCard.createDiv({ cls: 'highlight-source' });
+      const citation = highlight.title ? `— ${highlight.title}` : '— Unknown Source';
+      sourceEl.createEl('em', { text: citation });
+      sourceEl.style.marginTop = '10px';
+      sourceEl.style.textAlign = 'right';
+      sourceEl.style.color = '#a89f91'; // Muted gold/tan
       sourceEl.style.display = 'flex';
       sourceEl.style.justifyContent = 'flex-end';
       sourceEl.style.fontSize = '0.85em';
@@ -611,295 +653,7 @@ export class DashboardView extends ItemView {
    * Add dashboard styles
    */
   private addStyles(): void {
-    const styleId = 'reading-dashboard-styles';
-    if (document.getElementById(styleId)) return;
-
-    const style = document.createElement('style');
-    style.id = styleId;
-    style.textContent = `
-      .reading-dashboard {
-        padding: 20px;
-        font-family: var(--font-interface);
-      }
-
-      .dashboard-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 24px;
-        border-bottom: 1px solid var(--background-modifier-border);
-        padding-bottom: 12px;
-      }
-
-      .dashboard-header h2 {
-        margin: 0;
-        font-size: 1.5em;
-      }
-
-      .dashboard-refresh-btn {
-        padding: 6px 12px;
-        border-radius: 6px;
-        background: var(--interactive-accent);
-        color: var(--text-on-accent);
-        border: none;
-        cursor: pointer;
-        font-size: 0.9em;
-      }
-
-      .dashboard-refresh-btn:hover {
-        opacity: 0.9;
-      }
-
-      .dashboard-section {
-        margin-bottom: 28px;
-      }
-
-      .dashboard-section h3 {
-        margin: 0 0 16px 0;
-        font-size: 1.1em;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-
-      .stats-cards {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-        gap: 12px;
-      }
-
-      .stat-card {
-        background: var(--background-secondary);
-        border-radius: 12px;
-        padding: 16px;
-        text-align: center;
-        border: 1px solid var(--background-modifier-border);
-      }
-
-      .stat-card-clickable {
-        cursor: pointer;
-        transition: transform 0.2s, box-shadow 0.2s;
-      }
-
-      .stat-card-clickable:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        border-color: var(--interactive-accent);
-      }
-
-      .stat-icon {
-        font-size: 1.5em;
-        margin-bottom: 8px;
-      }
-
-      .stat-value {
-        font-size: 1.8em;
-        font-weight: bold;
-        color: var(--text-normal);
-        margin-bottom: 4px;
-      }
-
-      .stat-label {
-        font-size: 0.85em;
-        color: var(--text-muted);
-      }
-
-      .books-list {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-      }
-
-      .books-list-with-covers {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-      }
-
-      .book-card {
-        background: var(--background-secondary);
-        border-radius: 8px;
-        padding: 14px;
-        border: 1px solid var(--background-modifier-border);
-      }
-
-      .book-card-with-cover {
-        display: flex;
-        gap: 14px;
-        background: var(--background-secondary);
-        border-radius: 8px;
-        padding: 12px;
-        border: 1px solid var(--background-modifier-border);
-      }
-
-      .book-cover-small {
-        width: 50px;
-        height: 75px;
-        min-width: 50px;
-        border-radius: 4px;
-        overflow: hidden;
-        background: var(--background-modifier-border);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-      }
-
-      .book-cover-small img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-
-      .cover-placeholder {
-        font-size: 1.5em;
-      }
-
-      .book-content {
-        flex: 1;
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-      }
-
-      .book-info {
-        margin-bottom: 10px;
-      }
-
-      .book-title-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 2px;
-      }
-
-      .book-title {
-        font-weight: 600;
-        font-size: 1em;
-      }
-
-      .page-count-editor {
-        display: inline-flex;
-        align-items: center;
-      }
-
-      .page-count-display {
-        cursor: pointer;
-        font-size: 0.75em;
-        padding: 2px 6px;
-        border-radius: 4px;
-        transition: all 0.2s ease;
-      }
-
-      .page-count-display.has-pages {
-        color: var(--text-muted);
-        background: var(--background-modifier-border);
-      }
-
-      .page-count-display.no-pages {
-        opacity: 0.4;
-      }
-
-      .page-count-display:hover {
-        opacity: 1;
-        background: var(--background-modifier-hover);
-      }
-
-      .page-count-input {
-        width: 60px;
-        padding: 2px 6px;
-        font-size: 0.75em;
-        border: 1px solid var(--interactive-accent);
-        border-radius: 4px;
-        background: var(--background-primary);
-        color: var(--text-normal);
-        outline: none;
-      }
-
-      .page-count-input:focus {
-        box-shadow: 0 0 0 2px var(--interactive-accent-hover);
-      }
-
-      .book-author {
-        font-size: 0.85em;
-        color: var(--text-muted);
-      }
-
-      .progress-container {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-
-      .progress-bar {
-        flex: 1;
-        height: 10px;
-        background: #1a1a1a;
-        border-radius: 5px;
-        overflow: hidden;
-        border: 1px solid #333;
-      }
-
-      .progress-fill {
-        height: 100%;
-        background: #22c55e;
-        border-radius: 5px;
-        transition: width 0.3s ease;
-      }
-
-      .progress-text {
-        font-size: 0.9em;
-        font-weight: 600;
-        color: var(--text-normal);
-        min-width: 45px;
-        text-align: right;
-      }
-
-      .activity-list {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-      }
-
-      .activity-list li {
-        padding: 8px 0;
-        border-bottom: 1px solid var(--background-modifier-border);
-        color: var(--text-muted);
-        font-size: 0.9em;
-      }
-
-      .activity-list li:last-child {
-        border-bottom: none;
-      }
-
-      .dashboard-empty {
-        color: var(--text-muted);
-        font-style: italic;
-        padding: 20px 0;
-      }
-
-      .dashboard-error {
-        color: var(--text-error);
-        padding: 20px;
-        background: var(--background-secondary);
-        border-radius: 8px;
-      }
-
-      .dashboard-loading {
-        padding: 40px;
-        text-align: center;
-        color: var(--text-muted);
-      }
-
-      .dashboard-sync-info {
-        margin-top: 20px;
-        padding-top: 12px;
-        border-top: 1px solid var(--background-modifier-border);
-        text-align: center;
-        color: var(--text-faint);
-      }
-    `;
-    document.head.appendChild(style);
+    // Styles are now managed in styles.css for the "Librarish" theme
   }
 }
+
