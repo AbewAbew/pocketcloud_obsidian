@@ -265,6 +265,39 @@ export default class PocketbookCloudHighlightsImporterPlugin extends Plugin {
       root.style.setProperty('--wood-texture', 'none');
       console.log('[Pocketbook] Bookshelf texture disabled (solid color)');
     }
+
+    // Load leather texture
+    await this.loadTextureAsVariable(root, this.settings.leatherTexture, '--leather-texture');
+
+    // Load parchment texture
+    await this.loadTextureAsVariable(root, this.settings.parchmentTexture, '--parchment-texture');
+  }
+
+  /**
+   * Load a vault image as a CSS custom property (data URI)
+   */
+  private async loadTextureAsVariable(root: HTMLElement, vaultPath: string, cssVar: string): Promise<void> {
+    if (!vaultPath) {
+      root.style.setProperty(cssVar, 'none');
+      return;
+    }
+    try {
+      const file = this.app.vault.getAbstractFileByPath(vaultPath);
+      if (file instanceof TFile) {
+        const arrayBuffer = await this.app.vault.readBinary(file);
+        const base64 = this.arrayBufferToBase64(arrayBuffer);
+        const mimeType = this.getMimeType(file.extension);
+        const dataUri = `url('data:${mimeType};base64,${base64}')`;
+        root.style.setProperty(cssVar, dataUri);
+        console.log(`[Pocketbook] Applied texture ${cssVar}:`, vaultPath);
+      } else {
+        console.warn(`[Pocketbook] Texture file not found for ${cssVar}:`, vaultPath);
+        root.style.setProperty(cssVar, 'none');
+      }
+    } catch (e) {
+      console.error(`[Pocketbook] Failed to load texture for ${cssVar}:`, e);
+      root.style.setProperty(cssVar, 'none');
+    }
   }
 
   /**

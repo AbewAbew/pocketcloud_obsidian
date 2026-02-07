@@ -124,10 +124,15 @@ export class BookDetailModal extends Modal {
         // Container
         const container = contentEl.createDiv({ cls: 'book-detail-container' });
 
+        // Hero backdrop — blurred cover image behind top section
+        const coverUrl = this.hardcoverData?.image?.url;
+        if (coverUrl) {
+            const heroBackdrop = container.createDiv({ cls: 'book-detail-hero-backdrop' });
+            heroBackdrop.style.backgroundImage = `url(${coverUrl})`;
+        }
+
         // Cover Section
         const coverContainer = container.createDiv({ cls: 'book-detail-cover' });
-        // Try Hardcover image first, then Pocketbook fallback
-        const coverUrl = this.hardcoverData?.image?.url;
 
         if (coverUrl) {
             const img = coverContainer.createEl('img');

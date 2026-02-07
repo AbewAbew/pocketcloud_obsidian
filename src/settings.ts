@@ -45,6 +45,8 @@ export interface PocketbookCloudHighlightsImporterPluginSettings {
   // Appearance / Theming
   bookshelfTexture: string; // Vault path to custom texture image
   useDefaultBookshelfTexture: boolean; // true = use factory wood texture, false = use custom or none
+  leatherTexture: string; // Vault path to dark leather seamless texture
+  parchmentTexture: string; // Vault path to aged parchment seamless texture
 }
 
 import { TemplatingService } from './templating';
@@ -93,6 +95,8 @@ export const DEFAULT_SETTINGS: PocketbookCloudHighlightsImporterPluginSettings =
   // Appearance Defaults
   bookshelfTexture: '',
   useDefaultBookshelfTexture: true,
+  leatherTexture: '',
+  parchmentTexture: '',
 };
 
 export class PocketbookCloudHighlightsImporterSettingTab extends PluginSettingTab {
@@ -555,6 +559,35 @@ export class PocketbookCloudHighlightsImporterSettingTab extends PluginSettingTa
             })
         );
     }
+    // Leather Texture
+    new Setting(containerEl)
+      .setName('Leather Texture')
+      .setDesc('Path to a dark leather seamless texture in your vault (used for Book Detail modal background, meta cards). Leave empty for CSS gradient fallback.')
+      .addText(text =>
+        text
+          .setPlaceholder('Attachments/leather.jpg')
+          .setValue(this.plugin.settings.leatherTexture)
+          .onChange(async value => {
+            this.plugin.settings.leatherTexture = value.replace(/^\//, '');
+            await this.plugin.saveSettings();
+            await this.plugin.applyTheme();
+          })
+      );
+
+    // Parchment Texture
+    new Setting(containerEl)
+      .setName('Parchment Texture')
+      .setDesc('Path to an aged paper/parchment seamless texture in your vault (used for book descriptions, review cards). Leave empty for CSS gradient fallback.')
+      .addText(text =>
+        text
+          .setPlaceholder('Attachments/parchment.jpg')
+          .setValue(this.plugin.settings.parchmentTexture)
+          .onChange(async value => {
+            this.plugin.settings.parchmentTexture = value.replace(/^\//, '');
+            await this.plugin.saveSettings();
+            await this.plugin.applyTheme();
+          })
+      );
   }
 } // End of SettingTab
 
